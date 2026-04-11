@@ -28,7 +28,7 @@ void print_device_info(const device_info_t& d) {
 }
 
 int main() {
-    auto devices = enumerate_devices();
+    auto devices = enumerate_devices(true);
     for (const auto& d : devices) {
         print_device_info(d);
         if (d.product_id == 0x0015 && d.vendor_id == 0x1532) {
