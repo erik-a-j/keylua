@@ -4,6 +4,10 @@
 #include <vector>
 #include "device.h"
 
-std::vector<device_info_t> enumerate_devices(bool keep_devices);
+template <bool OwnDevices>
+std::vector<BaseDeviceInfo<OwnDevices>> enumerate_devices();
+
+extern template std::vector<BaseDeviceInfo<true>>  enumerate_devices<true>();
+extern template std::vector<BaseDeviceInfo<false>> enumerate_devices<false>();
 
 #endif /* #ifndef DEVICE_ENUMERATOR_H */

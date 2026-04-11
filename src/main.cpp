@@ -23,15 +23,16 @@ bool is_keyboard(libevdev* dev) {
         !libevdev_has_event_type(dev, EV_REL);
 }
 
-void print_device_info(const device_info_t& d) {
-    std::cout << "- path: " << d.path << " product:vendor: " << std::hex << d.product_id << ':' << d.vendor_id << std::dec << std::endl;
+template <bool F>
+void print_device_info(const BaseDeviceInfo<F>& d) {
+    std::cout << "- path: " << d.path() << " product:vendor: " << std::hex << d.productID() << ':' << d.vendorID() << std::dec << std::endl;
 }
 
 int main() {
-    auto devices = enumerate_devices(true);
+    auto devices = enumerate_devices<true>();
     for (const auto& d : devices) {
         print_device_info(d);
-        if (d.product_id == 0x0015 && d.vendor_id == 0x1532) {
+        if (d.productID() == 0x0015 && d.vendorID() == 0x1532) {
             std::cout << "Found Naga\n";
         }
     }

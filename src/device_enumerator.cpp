@@ -5,8 +5,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-std::vector<device_info_t> enumerate_devices(bool keep_devices) {
-    std::vector<device_info_t> devices;
+template <bool OwnDevices>
+std::vector<BaseDeviceInfo<OwnDevices>> enumerate_devices() {
+    std::vector<BaseDeviceInfo<OwnDevices>> devices;
     devices.reserve(16);
     libevdev* dev{nullptr};
 
@@ -17,19 +18,22 @@ std::vector<device_info_t> enumerate_devices(bool keep_devices) {
         if (fd == -1) { break; }
 
         if (0 == libevdev_new_from_fd(fd, &dev)) {
-            if (keep_devices) {
-                devices.emplace_back(path, libevdev_get_id_product(dev), libevdev_get_id_vendor(dev), dev);
-            }
-            else {
-                devices.emplace_back(path, libevdev_get_id_product(dev), libevdev_get_id_vendor(dev));
+            devices.emplace_back(path, dev, fd);
+            if constexpr (!OwnDevices) {
                 libevdev_free(dev);
+                close(fd);
             }
             dev = nullptr;
         }
-
-        close(fd);
+        else {
+            close(fd);
+        }
     }
     return devices;
 }
+
+template std::vector<BaseDeviceInfo<true>>  enumerate_devices<true>();
+template std::vector<BaseDeviceInfo<false>> enumerate_devices<false>();
+
 
 /* device_enumerator.cpp END */
