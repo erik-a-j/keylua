@@ -29,11 +29,30 @@ public:
             m_dev = nullptr;
         }
     }
+    BaseDeviceInfo(const BaseDeviceInfo&) = delete;
+    BaseDeviceInfo& operator=(const BaseDeviceInfo&) = delete;
+    BaseDeviceInfo(BaseDeviceInfo&& other) noexcept
+        : m_path{std::move(other.m_path)},
+        m_product_id{other.m_product_id},
+        m_vendor_id{other.m_vendor_id},
+        m_fd{other.m_fd},
+        m_dev{other.m_dev}
+    {
+        if constexpr (OwnDevice) {
+            other.m_fd = -1;
+            other.m_dev = nullptr;
+        }
+    }
+    BaseDeviceInfo& operator=(BaseDeviceInfo&&) = delete;
 
     ~BaseDeviceInfo() {
         if constexpr (OwnDevice) {
-            (void)::libevdev_free(m_dev);
-            (void)::close(m_fd);
+            if (m_dev) {
+                ::libevdev_free(m_dev);
+            }
+            if (m_fd != -1) {
+                ::close(m_fd);
+            }
         }
     }
 

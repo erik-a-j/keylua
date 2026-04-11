@@ -29,7 +29,7 @@ void print_device_info(const BaseDeviceInfo<F>& d) {
 }
 
 int main() {
-    auto devices = enumerate_devices<true>();
+    auto devices = enumerate_devices<false>();
     for (const auto& d : devices) {
         print_device_info(d);
         if (d.productID() == 0x0015 && d.vendorID() == 0x1532) {
