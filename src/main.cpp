@@ -13,7 +13,7 @@ void print_device_info(const Device& d) {
         << "  - Event Nodes:\n";
     for (const auto& node : d.evnodes()) {
         std::cout << "    - Path: " << node.path() << '\n'
-            << "      Type: " << node.typestr() << '\n';
+            << "      Type: " << node.type() << '\n';
     }
 }
 
@@ -27,16 +27,16 @@ int main() {
 
     std::cout << std::endl;
 
-    for (const auto& node : d.evnodes()) {
-        DeviceGrabber dev{node};
-        if (!dev) {
-            std::cerr << dev.errmsg() << std::endl;
-            continue;
-        }
-        std::cout << "Grabbed: " << node.path() << " Type: " << node.typestr() << std::endl;
-        usleep(1'000'000);
-        std::cout << "Ungrabbed: " << node.path() << std::endl;
-    }
+    /*     for (const auto& node : d.evnodes()) {
+             DeviceGrabber dev{node};
+             if (!dev) {
+                 std::cerr << dev.errmsg() << std::endl;
+                 continue;
+             }
+             std::cout << "Grabbed: " << node.path() << " Type: " << node.type() << std::endl;
+             usleep(1'000'000);
+             std::cout << "Ungrabbed: " << node.path() << std::endl;
+         } */
 
     udev_unref(udev);
     return 0;

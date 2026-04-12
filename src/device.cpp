@@ -53,8 +53,7 @@ static const char* find_iface_syspath(
     return NULL;
 }
 
-static const char* find_event_node(udev* udev, const char* iface_syspath) {
-    static char node[256];
+static udev_device* find_event_node(udev* udev, const char* iface_syspath) {
     udev_enumerate* enumerate;
     udev_list_entry* devices;
     udev_list_entry* entry;
@@ -79,10 +78,10 @@ static const char* find_event_node(udev* udev, const char* iface_syspath) {
         while (parent) {
             const char* ppath = udev_device_get_syspath(parent);
             if (ppath && 0 == std::strcmp(ppath, iface_syspath)) {
-                std::strncpy(node, devnode, sizeof(node) - 1);
+                udev_device* result = udev_device_ref(dev);
                 udev_device_unref(dev);
                 udev_enumerate_unref(enumerate);
-                return node;
+                return result;
             }
             parent = udev_device_get_parent(parent);
         }
@@ -94,12 +93,27 @@ static const char* find_event_node(udev* udev, const char* iface_syspath) {
     return NULL;
 }
 
+EventNode::EventNode(::udev_device* udev_dev, Type type)
+    : m_udev_dev{::udev_device_ref(udev_dev), &::udev_device_unref},
+    m_type{type} {}
+
+std::string_view EventNode::path() const
+{
+    return std::string_view(::udev_device_get_devnode(m_udev_dev.get()));
+}
+
+std::string_view EventNode::type() const
+{
+    return std::string_view(::udev_device_get_devtype(m_udev_dev.get()));
+}
+
+
 Device::Device(udev* udev, const char* vid, const char* pid)
     : m_vid{vid},
     m_pid{pid}
 {
     const char* iface;
-    const char* evnode;
+    udev_device* evnode;
 
     iface = ::find_iface_syspath(udev, vid, pid, "01");
     if (iface) {
@@ -171,6 +185,7 @@ DeviceGrabber::~DeviceGrabber() {
 }
 
 /* device.cpp END */
+
 
 
 

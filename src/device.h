@@ -12,15 +12,19 @@ class EventNode {
 public:
     enum Type { Keyboard, Mouse };
 
-    explicit EventNode(const char* path, Type type) : m_path{path}, m_type{type} {}
-    //EventNode(const EventNode& other) :  {}
+    explicit EventNode(::udev_device* udev_dev, Type type);
 
-    std::string_view path() const { return m_path; }
-    std::string_view typestr() const { return m_typestr[m_type]; }
-    Type type() const { return m_type; }
+    EventNode(EventNode&& other) = delete;
+    EventNode& operator=(EventNode&&) = delete;
+    EventNode(const EventNode&) = delete;
+    EventNode& operator=(const EventNode&) = delete;
+
+    std::string_view path() const;
+    std::string_view type() const;
+    //Type type() const;
 
 private:
-    std::string m_path;
+    std::unique_ptr<::udev_device, decltype(&::udev_device_unref)> m_udev_dev;
     Type m_type;
     static constexpr std::string_view m_typestr[2]{"keyboard", "mouse"};
 };
@@ -28,6 +32,11 @@ private:
 class Device {
 public:
     explicit Device(udev* udev, const char* vid, const char* pid);
+
+    Device(Device&& other) = delete;
+    Device& operator=(Device&&) = delete;
+    Device(const Device&) = delete;
+    Device& operator=(const Device&) = delete;
 
     std::string_view vid() const { return m_vid; }
     std::string_view pid() const { return m_pid; }
@@ -61,7 +70,7 @@ public:
 private:
     int m_fd;
     libevdev* m_dev;
-    EventNode m_evnode;
+    const EventNode& m_evnode;
     std::string m_errbuf;
 };
 
