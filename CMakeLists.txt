@@ -13,7 +13,7 @@ pkg_check_modules(UDEV REQUIRED IMPORTED_TARGET libudev)
 
 set(SRC_FILES 
     src/main.cpp
-    src/device_enumerator.cpp
+    src/device.cpp
 )
 
 add_executable(keylua ${SRC_FILES})

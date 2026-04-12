@@ -6,38 +6,24 @@
 #include <libevdev/libevdev.h>
 #include <string>
 #include <unistd.h>
-#include "device_enumerator.h"
-#include "device_grabber.h"
+#include "device.h"
 
-bool is_mouse(libevdev* dev) {
-    return libevdev_has_event_type(dev, EV_REL) &&
-        libevdev_has_event_code(dev, EV_REL, REL_X) &&
-        libevdev_has_event_code(dev, EV_REL, REL_Y) &&
-        libevdev_has_event_code(dev, EV_KEY, BTN_LEFT);
-}
-
-bool is_keyboard(libevdev* dev) {
-    return libevdev_has_event_type(dev, EV_KEY) &&
-        libevdev_has_event_code(dev, EV_KEY, KEY_A) &&
-        libevdev_has_event_code(dev, EV_KEY, KEY_SPACE) &&
-        !libevdev_has_event_type(dev, EV_REL);
-}
-
-template <bool F>
-void print_device_info(const BaseDeviceInfo<F>& d) {
-    std::cout << "- path: " << d.path() << " product:vendor: " << std::hex << d.productID() << ':' << d.vendorID() << std::dec << std::endl;
+void print_device_info(const Device& d) {
+    std::cout << "- Product:Vendor: " << d.product_id() << ':' << d.vendor_id() << '\n'
+        << "  - Event Nodes:\n";
+    for (const auto& node : d.event_nodes()) {
+        std::cout << "    - Type: " << (node.type() == EventNode::Type::Keyboard ? "Keyboard" : "Mouse") << '\n'
+            << "    - Path: " << node.path() << '\n';
+    }
 }
 
 int main() {
-    auto devices = enumerate_devices<false>();
-    for (const auto& d : devices) {
-        print_device_info(d);
-        if (d.productID() == 0x0015 && d.vendorID() == 0x1532) {
-            std::cout << "Found Naga\n";
-        }
-    }
-
-
+    udev* udev = udev_new();
+    const char* vendor_id = "1532";
+    const char* product_id = "0015";
+    Device d{udev, vendor_id, product_id};
+    print_device_info(d);
+    udev_unref(udev);
     return 0;
 }
 
