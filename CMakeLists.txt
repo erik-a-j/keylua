@@ -19,3 +19,11 @@ set(SRC_FILES
 add_executable(keylua ${SRC_FILES})
 
 target_link_libraries(keylua PkgConfig::EVDEV PkgConfig::UDEV)
+target_compile_options(keylua PRIVATE 
+    -Wall -Wextra -Werror -pedantic-errors -Wconversion -Wsign-conversion
+)
+target_compile_options(keylua PRIVATE 
+    -Wno-unused-variable
+)
+
+

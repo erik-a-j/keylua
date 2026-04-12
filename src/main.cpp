@@ -9,20 +9,35 @@
 #include "device.h"
 
 void print_device_info(const Device& d) {
-    std::cout << "- Product:Vendor: " << d.product_id() << ':' << d.vendor_id() << '\n'
+    std::cout << "- Product:Vendor: " << d.pid() << ':' << d.vid() << '\n'
         << "  - Event Nodes:\n";
-    for (const auto& node : d.event_nodes()) {
-        std::cout << "    - Type: " << (node.type() == EventNode::Type::Keyboard ? "Keyboard" : "Mouse") << '\n'
-            << "    - Path: " << node.path() << '\n';
+    for (const auto& node : d.evnodes()) {
+        std::cout << "    - Path: " << node.path() << '\n'
+            << "      Type: " << node.typestr() << '\n';
     }
 }
 
 int main() {
     udev* udev = udev_new();
-    const char* vendor_id = "1532";
-    const char* product_id = "0015";
-    Device d{udev, vendor_id, product_id};
+
+    const char* vid = "1532";
+    const char* pid = "0015";
+    Device d{udev, vid, pid};
     print_device_info(d);
+
+    std::cout << std::endl;
+
+    for (const auto& node : d.evnodes()) {
+        DeviceGrabber dev{node};
+        if (!dev) {
+            std::cerr << dev.errmsg() << std::endl;
+            continue;
+        }
+        std::cout << "Grabbed: " << node.path() << " Type: " << node.typestr() << std::endl;
+        usleep(1'000'000);
+        std::cout << "Ungrabbed: " << node.path() << std::endl;
+    }
+
     udev_unref(udev);
     return 0;
 }

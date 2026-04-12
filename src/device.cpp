@@ -9,7 +9,7 @@
 #include <cstring>
 #include <utility>
 
-const char* find_iface_syspath(
+static const char* find_iface_syspath(
     udev* udev,
     const char* vendor_id,
     const char* product_id,
@@ -53,7 +53,7 @@ const char* find_iface_syspath(
     return NULL;
 }
 
-const char* find_event_node(udev* udev, const char* iface_syspath) {
+static const char* find_event_node(udev* udev, const char* iface_syspath) {
     static char node[256];
     udev_enumerate* enumerate;
     udev_list_entry* devices;
@@ -94,31 +94,83 @@ const char* find_event_node(udev* udev, const char* iface_syspath) {
     return NULL;
 }
 
-
-Device::Device(udev* udev, const char* vendor_id, const char* product_id)
-    : m_vendor_id{vendor_id},
-    m_product_id{product_id} {
-
+Device::Device(udev* udev, const char* vid, const char* pid)
+    : m_vid{vid},
+    m_pid{pid}
+{
     const char* iface;
     const char* evnode;
 
-    iface = find_iface_syspath(udev, vendor_id, product_id, "01");
+    iface = ::find_iface_syspath(udev, vid, pid, "01");
     if (iface) {
-        evnode = find_event_node(udev, iface);
+        evnode = ::find_event_node(udev, iface);
         if (evnode) {
-            m_event_nodes.emplace_back(evnode, EventNode::Type::Keyboard);
+            m_evnodes.emplace_back(evnode, EventNode::Type::Keyboard);
         }
     }
-    iface = find_iface_syspath(udev, vendor_id, product_id, "02");
+    iface = ::find_iface_syspath(udev, vid, pid, "02");
     if (iface) {
-        evnode = find_event_node(udev, iface);
+        evnode = ::find_event_node(udev, iface);
         if (evnode) {
-            m_event_nodes.emplace_back(evnode, EventNode::Type::Mouse);
+            m_evnodes.emplace_back(evnode, EventNode::Type::Mouse);
         }
     }
 }
 
+DeviceGrabber::DeviceGrabber(const EventNode& evnode)
+    : m_fd{-1},
+    m_dev{nullptr},
+    m_evnode{evnode},
+    m_errbuf{}
+{
+    int fd{-1};
+    libevdev* dev{nullptr};
+    std::string_view path = m_evnode.path();
+
+    fd = ::open(path.data(), O_RDONLY|O_NONBLOCK);
+    if (fd == -1) {
+        m_errbuf = "Error: " + std::string{path} + "does not exist";
+        return;
+    }
+
+    int err = ::libevdev_new_from_fd(fd, &dev);
+    if (err != 0) {
+        m_errbuf = "libevdev_new_from_fd Error: " + std::string{std::strerror(-err)};
+        ::close(fd);
+        return;
+    }
+
+    err = ::libevdev_grab(dev, LIBEVDEV_GRAB);
+    if (err != 0) {
+        m_errbuf = "libevdev_grab Error: " + std::string{std::strerror(-err)};
+        ::libevdev_free(dev);
+        ::close(fd);
+        return;
+    }
+
+    m_fd = fd;
+    m_dev = dev;
+}
+DeviceGrabber::DeviceGrabber(DeviceGrabber&& other)
+    : m_fd{other.m_fd},
+    m_dev{other.m_dev},
+    m_evnode{other.m_evnode},
+    m_errbuf{other.m_errbuf}
+{
+    other.m_fd = -1;
+    other.m_dev = nullptr;
+}
+DeviceGrabber::~DeviceGrabber() {
+    if (m_dev != nullptr) {
+        ::libevdev_grab(m_dev, LIBEVDEV_UNGRAB);
+        ::libevdev_free(m_dev);
+    }
+    if (m_fd != -1) {
+        ::close(m_fd);
+    }
+}
 
 /* device.cpp END */
+
 
 

@@ -2,93 +2,67 @@
 #define DEVICE_H
 
 #include <string>
+#include <string_view>
 #include <vector>
+#include <memory>
 #include <libevdev/libevdev.h>
 #include <libudev.h>
 
-const char* find_event_node(udev* udev, const char* iface_syspath);
-const char* find_iface_syspath(
-    udev* udev,
-    const char* vendor_id,
-    const char* product_id,
-    const char* protocol
-);
-
 class EventNode {
 public:
-    enum class Type { Keyboard, Mouse };
+    enum Type { Keyboard, Mouse };
 
-    EventNode(const char* path, Type type) : m_path{path}, m_type{type} {}
+    explicit EventNode(const char* path, Type type) : m_path{path}, m_type{type} {}
+    //EventNode(const EventNode& other) :  {}
 
-    const std::string& path() const { return m_path; }
+    std::string_view path() const { return m_path; }
+    std::string_view typestr() const { return m_typestr[m_type]; }
     Type type() const { return m_type; }
+
 private:
     std::string m_path;
     Type m_type;
+    static constexpr std::string_view m_typestr[2]{"keyboard", "mouse"};
 };
 
 class Device {
-    std::string m_vendor_id;
-    std::string m_product_id;
-    std::vector<EventNode> m_event_nodes;
-
 public:
-    explicit Device(udev* udev, const char* vendor_id, const char* product_id);
+    explicit Device(udev* udev, const char* vid, const char* pid);
 
-    const std::string& vendor_id() const { return m_vendor_id; }
-    const std::string& product_id() const { return m_product_id; }
-    const std::vector<EventNode>& event_nodes() const { return m_event_nodes; }
+    std::string_view vid() const { return m_vid; }
+    std::string_view pid() const { return m_pid; }
+    const std::vector<EventNode>& evnodes() const { return m_evnodes; }
+
+private:
+    std::string m_vid;
+    std::string m_pid;
+    std::vector<EventNode> m_evnodes;
 };
 
-/* class DeviceInfo {
-     std::string m_path{};
-     uint16_t m_product_id{};
-     uint16_t m_vendor_id{};
-     libevdev* m_dev{nullptr};
-     int m_fd{-1};
+class DeviceGrabber {
+public:
+    explicit DeviceGrabber(const EventNode& evnode);
 
- public:
-     explicit DeviceInfo(const std::string& path) {
-         m_fd = ::open(path.c_str(), O_RDONLY|O_NONBLOCK);
-         if (m_fd == -1) {
-             throw std::runtime_error("Error: " + path + "does not exist");
-         }
-         int err = ::libevdev_new_from_fd(m_fd, &m_dev);
-         if (err != 0) {
-             throw std::runtime_error("libevdev_new_from_fd Error: " + std::string{std::strerror(err)});
-         }
-         m_path = path;
-         m_product_id = static_cast<uint16_t>(::libevdev_get_id_product(m_dev));
-         m_vendor_id = static_cast<uint16_t>(::libevdev_get_id_vendor(m_dev));
-     }
+    DeviceGrabber(DeviceGrabber&& other);
+    DeviceGrabber& operator=(DeviceGrabber&&) = delete;
+    DeviceGrabber(const DeviceGrabber&) = delete;
+    DeviceGrabber& operator=(const DeviceGrabber&) = delete;
 
-     DeviceInfo(DeviceInfo&& other) noexcept
-         : m_path{std::move(other.m_path)},
-         m_product_id{other.m_product_id},
-         m_vendor_id{other.m_vendor_id},
-         m_dev{other.m_dev},
-         m_fd{other.m_fd} {
-         other.m_dev = nullptr;
-         other.m_fd = -1;
-     }
-     DeviceInfo& operator=(DeviceInfo&&) = delete;
-     DeviceInfo(const DeviceInfo&) = delete;
-     DeviceInfo& operator=(const DeviceInfo&) = delete;
+    ~DeviceGrabber();
 
-     ~DeviceInfo() {
-         if (m_dev) { ::libevdev_free(m_dev); }
-         if (m_fd != -1) { ::close(m_fd); }
-     }
+    int fd() const { return m_fd; }
+    const libevdev* dev() const { return m_dev; }
 
-     const std::string& path() const { return m_path; }
-     uint16_t productID() const { return m_product_id; }
-     uint16_t vendorID() const { return m_vendor_id; }
-     libevdev* dev() const { return m_dev; }
-     int fd() const { return m_fd; }
-     bool is_virtual() const {
-         const char* phys = ::libevdev_get_phys(m_dev);
-         return phys == nullptr || phys[0] == '\0';
-     }
- }; */
+    explicit operator bool() const {
+        return m_errbuf.empty() && m_fd != -1 && m_dev != nullptr;
+    }
+    std::string_view errmsg() const { return m_errbuf; }
+
+private:
+    int m_fd;
+    libevdev* m_dev;
+    EventNode m_evnode;
+    std::string m_errbuf;
+};
 
 #endif /* #ifndef DEVICE_H */
