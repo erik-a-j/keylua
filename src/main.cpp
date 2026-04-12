@@ -12,8 +12,10 @@ void print_device_info(const Device& d) {
     std::cout << "- Product:Vendor: " << d.pid() << ':' << d.vid() << '\n'
         << "  - Event Nodes:\n";
     for (const auto& node : d.evnodes()) {
-        std::cout << "    - Path: " << node.path() << '\n'
-            << "      Type: " << node.type() << '\n';
+        std::cout << "    - Name: " << node.name() << '\n'
+            << "      Path: " << node.devpath() << '\n'
+            << "      Node: " << node.devnode() << '\n'
+            << "      Type: " << node.typestr() << '\n';
     }
 }
 

@@ -97,14 +97,33 @@ EventNode::EventNode(::udev_device* udev_dev, Type type)
     : m_udev_dev{::udev_device_ref(udev_dev), &::udev_device_unref},
     m_type{type} {}
 
-std::string_view EventNode::path() const
+EventNode::EventNode(EventNode&& other)
+    : m_udev_dev{std::move(other.m_udev_dev)},
+    m_type{other.m_type} {}
+
+std::string_view EventNode::name() const
 {
-    return std::string_view(::udev_device_get_devnode(m_udev_dev.get()));
+    const char* name{nullptr};
+    udev_device* parent = this->udev_parent();
+    if (parent) {
+        name = ::udev_device_get_sysattr_value(parent, "name");
+    }
+    return name ? std::string_view{name} : m_unknown;
+}
+std::string_view EventNode::devpath() const
+{
+    const char* devpath = ::udev_device_get_devpath(m_udev_dev.get());
+    return devpath ? std::string_view{devpath} : m_unknown;
+}
+std::string_view EventNode::devnode() const
+{
+    const char* devnode = ::udev_device_get_devnode(m_udev_dev.get());
+    return devnode ? std::string_view{devnode} : m_unknown;
 }
 
-std::string_view EventNode::type() const
+udev_device* EventNode::udev_parent() const
 {
-    return std::string_view(::udev_device_get_devtype(m_udev_dev.get()));
+    return ::udev_device_get_parent_with_subsystem_devtype(m_udev_dev.get(), "input", nullptr);
 }
 
 
@@ -114,6 +133,7 @@ Device::Device(udev* udev, const char* vid, const char* pid)
 {
     const char* iface;
     udev_device* evnode;
+    m_evnodes.reserve(2);
 
     iface = ::find_iface_syspath(udev, vid, pid, "01");
     if (iface) {
@@ -139,7 +159,7 @@ DeviceGrabber::DeviceGrabber(const EventNode& evnode)
 {
     int fd{-1};
     libevdev* dev{nullptr};
-    std::string_view path = m_evnode.path();
+    std::string_view path = m_evnode.devnode();
 
     fd = ::open(path.data(), O_RDONLY|O_NONBLOCK);
     if (fd == -1) {

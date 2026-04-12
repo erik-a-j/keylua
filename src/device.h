@@ -14,19 +14,24 @@ public:
 
     explicit EventNode(::udev_device* udev_dev, Type type);
 
-    EventNode(EventNode&& other) = delete;
+    EventNode(EventNode&& other);
     EventNode& operator=(EventNode&&) = delete;
     EventNode(const EventNode&) = delete;
     EventNode& operator=(const EventNode&) = delete;
 
-    std::string_view path() const;
-    std::string_view type() const;
-    //Type type() const;
+    std::string_view name() const;
+    std::string_view devpath() const;
+    std::string_view devnode() const;
+    std::string_view typestr() const { return m_typestr[m_type]; }
+    Type type() const { return m_type; }
 
 private:
     std::unique_ptr<::udev_device, decltype(&::udev_device_unref)> m_udev_dev;
     Type m_type;
     static constexpr std::string_view m_typestr[2]{"keyboard", "mouse"};
+    static constexpr std::string_view m_unknown{"<unknown>"};
+
+    udev_device* udev_parent() const;
 };
 
 class Device {
