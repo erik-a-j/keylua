@@ -3,10 +3,10 @@
 
 #include <string>
 #include <string_view>
-#include <linux/input.h>
 
 struct libevdev;
 struct libevdev_uinput;
+struct input_event;
 
 class VirtualDevice {
 public:

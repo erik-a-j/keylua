@@ -21,6 +21,7 @@ public:
 
     int fd() const { return m_fd; }
     const ::libevdev* dev() const { return m_dev; }
+    ::libevdev* dev() { return m_dev; }
 
     explicit operator bool() const { return m_errbuf.empty() && m_fd != -1 && m_dev != nullptr; }
     std::string_view errmsg() const { return m_errbuf; }

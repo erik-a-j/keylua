@@ -1,6 +1,7 @@
 
 #include "virtual_device.h"
 #include <libevdev/libevdev-uinput.h>
+#include <linux/input.h>
 #include <cstring>
 
 VirtualDevice::VirtualDevice(const ::libevdev* src)
