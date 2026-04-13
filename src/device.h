@@ -5,19 +5,18 @@
 #include <string_view>
 #include <vector>
 #include <memory>
-#include <libevdev/libevdev.h>
 #include <libudev.h>
 
-class EventNode {
+class InputInterface {
 public:
     enum Type { Keyboard, Mouse };
 
-    explicit EventNode(::udev_device* udev_dev, Type type);
+    explicit InputInterface(::udev_device* udev_dev, Type type);
 
-    EventNode(EventNode&& other);
-    EventNode& operator=(EventNode&&) = delete;
-    EventNode(const EventNode&) = delete;
-    EventNode& operator=(const EventNode&) = delete;
+    InputInterface(InputInterface&& other);
+    InputInterface& operator=(InputInterface&&) = delete;
+    InputInterface(const InputInterface&) = delete;
+    InputInterface& operator=(const InputInterface&) = delete;
 
     std::string_view name() const;
     std::string_view devpath() const;
@@ -31,12 +30,12 @@ private:
     static constexpr std::string_view m_typestr[2]{"keyboard", "mouse"};
     static constexpr std::string_view m_unknown{"<unknown>"};
 
-    udev_device* udev_parent() const;
+    ::udev_device* udev_parent() const;
 };
 
 class Device {
 public:
-    explicit Device(udev* udev, const char* vid, const char* pid);
+    explicit Device(::udev* udev, const char* vid, const char* pid);
 
     Device(Device&& other) = delete;
     Device& operator=(Device&&) = delete;
@@ -45,38 +44,16 @@ public:
 
     std::string_view vid() const { return m_vid; }
     std::string_view pid() const { return m_pid; }
-    const std::vector<EventNode>& evnodes() const { return m_evnodes; }
+    const std::vector<InputInterface>& input_interfaces() const { return m_input_interfaces; }
 
 private:
     std::string m_vid;
     std::string m_pid;
-    std::vector<EventNode> m_evnodes;
+    std::vector<InputInterface> m_input_interfaces;
 };
 
-class DeviceGrabber {
-public:
-    explicit DeviceGrabber(const EventNode& evnode);
 
-    DeviceGrabber(DeviceGrabber&& other);
-    DeviceGrabber& operator=(DeviceGrabber&&) = delete;
-    DeviceGrabber(const DeviceGrabber&) = delete;
-    DeviceGrabber& operator=(const DeviceGrabber&) = delete;
 
-    ~DeviceGrabber();
 
-    int fd() const { return m_fd; }
-    const libevdev* dev() const { return m_dev; }
-
-    explicit operator bool() const {
-        return m_errbuf.empty() && m_fd != -1 && m_dev != nullptr;
-    }
-    std::string_view errmsg() const { return m_errbuf; }
-
-private:
-    int m_fd;
-    libevdev* m_dev;
-    const EventNode& m_evnode;
-    std::string m_errbuf;
-};
 
 #endif /* #ifndef DEVICE_H */

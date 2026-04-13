@@ -14,6 +14,9 @@ pkg_check_modules(UDEV REQUIRED IMPORTED_TARGET libudev)
 set(SRC_FILES 
     src/main.cpp
     src/device.cpp
+    src/device_grabber.cpp
+    src/virtual_device.cpp
+    src/event_pipeline.cpp
 )
 
 add_executable(keylua ${SRC_FILES})

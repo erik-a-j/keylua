@@ -1,4 +1,3 @@
-/* device.cpp BEGIN */
 
 #include "device.h"
 #include <fcntl.h>
@@ -93,119 +92,62 @@ static udev_device* find_event_node(udev* udev, const char* iface_syspath) {
     return NULL;
 }
 
-EventNode::EventNode(::udev_device* udev_dev, Type type)
+InputInterface::InputInterface(::udev_device* udev_dev, Type type)
     : m_udev_dev{::udev_device_ref(udev_dev), &::udev_device_unref},
     m_type{type} {}
 
-EventNode::EventNode(EventNode&& other)
+InputInterface::InputInterface(InputInterface&& other)
     : m_udev_dev{std::move(other.m_udev_dev)},
     m_type{other.m_type} {}
 
-std::string_view EventNode::name() const
+std::string_view InputInterface::name() const
 {
     const char* name{nullptr};
-    udev_device* parent = this->udev_parent();
+    ::udev_device* parent = this->udev_parent();
     if (parent) {
         name = ::udev_device_get_sysattr_value(parent, "name");
     }
     return name ? std::string_view{name} : m_unknown;
 }
-std::string_view EventNode::devpath() const
+std::string_view InputInterface::devpath() const
 {
     const char* devpath = ::udev_device_get_devpath(m_udev_dev.get());
     return devpath ? std::string_view{devpath} : m_unknown;
 }
-std::string_view EventNode::devnode() const
+std::string_view InputInterface::devnode() const
 {
     const char* devnode = ::udev_device_get_devnode(m_udev_dev.get());
     return devnode ? std::string_view{devnode} : m_unknown;
 }
 
-udev_device* EventNode::udev_parent() const
+udev_device* InputInterface::udev_parent() const
 {
     return ::udev_device_get_parent_with_subsystem_devtype(m_udev_dev.get(), "input", nullptr);
 }
 
 
-Device::Device(udev* udev, const char* vid, const char* pid)
+Device::Device(::udev* udev, const char* vid, const char* pid)
     : m_vid{vid},
     m_pid{pid}
 {
     const char* iface;
-    udev_device* evnode;
-    m_evnodes.reserve(2);
+    ::udev_device* evnode;
+    m_input_interfaces.reserve(2);
 
     iface = ::find_iface_syspath(udev, vid, pid, "01");
     if (iface) {
         evnode = ::find_event_node(udev, iface);
         if (evnode) {
-            m_evnodes.emplace_back(evnode, EventNode::Type::Keyboard);
+            m_input_interfaces.emplace_back(evnode, InputInterface::Type::Keyboard);
         }
     }
     iface = ::find_iface_syspath(udev, vid, pid, "02");
     if (iface) {
         evnode = ::find_event_node(udev, iface);
         if (evnode) {
-            m_evnodes.emplace_back(evnode, EventNode::Type::Mouse);
+            m_input_interfaces.emplace_back(evnode, InputInterface::Type::Mouse);
         }
     }
 }
-
-DeviceGrabber::DeviceGrabber(const EventNode& evnode)
-    : m_fd{-1},
-    m_dev{nullptr},
-    m_evnode{evnode},
-    m_errbuf{}
-{
-    int fd{-1};
-    libevdev* dev{nullptr};
-    std::string_view path = m_evnode.devnode();
-
-    fd = ::open(path.data(), O_RDONLY|O_NONBLOCK);
-    if (fd == -1) {
-        m_errbuf = "Error: " + std::string{path} + "does not exist";
-        return;
-    }
-
-    int err = ::libevdev_new_from_fd(fd, &dev);
-    if (err != 0) {
-        m_errbuf = "libevdev_new_from_fd Error: " + std::string{std::strerror(-err)};
-        ::close(fd);
-        return;
-    }
-
-    err = ::libevdev_grab(dev, LIBEVDEV_GRAB);
-    if (err != 0) {
-        m_errbuf = "libevdev_grab Error: " + std::string{std::strerror(-err)};
-        ::libevdev_free(dev);
-        ::close(fd);
-        return;
-    }
-
-    m_fd = fd;
-    m_dev = dev;
-}
-DeviceGrabber::DeviceGrabber(DeviceGrabber&& other)
-    : m_fd{other.m_fd},
-    m_dev{other.m_dev},
-    m_evnode{other.m_evnode},
-    m_errbuf{other.m_errbuf}
-{
-    other.m_fd = -1;
-    other.m_dev = nullptr;
-}
-DeviceGrabber::~DeviceGrabber() {
-    if (m_dev != nullptr) {
-        ::libevdev_grab(m_dev, LIBEVDEV_UNGRAB);
-        ::libevdev_free(m_dev);
-    }
-    if (m_fd != -1) {
-        ::close(m_fd);
-    }
-}
-
-/* device.cpp END */
-
-
 
 

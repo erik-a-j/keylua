@@ -1,4 +1,3 @@
-/* main.cpp BEGIN */
 
 #include <fcntl.h>
 #include <iostream>
@@ -7,11 +6,16 @@
 #include <string>
 #include <unistd.h>
 #include "device.h"
+#include "device_grabber.h"
+#include "virtual_device.h"
+#include "event_pipeline.h"
 
-void print_device_info(const Device& d) {
+void print_device_info(const Device& d)
+{
     std::cout << "- Product:Vendor: " << d.pid() << ':' << d.vid() << '\n'
         << "  - Event Nodes:\n";
-    for (const auto& node : d.evnodes()) {
+    for (const auto& node : d.input_interfaces())
+    {
         std::cout << "    - Name: " << node.name() << '\n'
             << "      Path: " << node.devpath() << '\n'
             << "      Node: " << node.devnode() << '\n'
@@ -19,7 +23,8 @@ void print_device_info(const Device& d) {
     }
 }
 
-int main() {
+int main()
+{
     udev* udev = udev_new();
 
     const char* vid = "1532";
@@ -29,19 +34,19 @@ int main() {
 
     std::cout << std::endl;
 
-    /*     for (const auto& node : d.evnodes()) {
-             DeviceGrabber dev{node};
-             if (!dev) {
-                 std::cerr << dev.errmsg() << std::endl;
-                 continue;
-             }
-             std::cout << "Grabbed: " << node.path() << " Type: " << node.type() << std::endl;
-             usleep(1'000'000);
-             std::cout << "Ungrabbed: " << node.path() << std::endl;
-         } */
+    for (const auto& node : d.input_interfaces())
+    {
+        DeviceGrabber dev{node.devnode()};
+        if (!dev)
+        {
+            std::cerr << dev.errmsg() << std::endl;
+            continue;
+        }
+        std::cout << "Grabbed: " << node.devnode() << " Type: " << node.type() << std::endl;
+        usleep(1'000'000);
+        std::cout << "Ungrabbed: " << node.devnode() << std::endl;
+    }
 
     udev_unref(udev);
     return 0;
 }
-
-/* main.cpp END */
