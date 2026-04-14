@@ -10,6 +10,7 @@
 #include "device_grabber.h"
 #include "virtual_device.h"
 #include "event_pipeline.h"
+#include "lua_runtime.h"
 
 static std::atomic<bool> g_stop{false};
 static void signal_handler(int)
@@ -32,6 +33,9 @@ void print_device_info(const Device& d)
 
 int main()
 {
+    LuaRuntime lr;
+    return 0;
+
     struct sigaction sa {};
     sa.sa_handler = signal_handler;
     sigemptyset(&sa.sa_mask);
