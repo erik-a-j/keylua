@@ -50,7 +50,7 @@ int main()
 
     for (const auto& node : d.input_interfaces())
     {
-        if (node.type() == InputInterface::Type::Keyboard)
+        if (node.type() == InputInterface::Type::Mouse)
         {
             DeviceGrabber dev{node.devnode()};
             if (!dev)
