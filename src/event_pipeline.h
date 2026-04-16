@@ -28,7 +28,6 @@ private:
 
     DeviceGrabber& m_dev;
     VirtualDevice& m_vdev;
-    //std::atomic<bool> m_stop_requested;
     std::string m_errbuf;
 };
 

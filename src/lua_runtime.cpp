@@ -1,14 +1,33 @@
 
 #include "lua_runtime.h"
+#include "virtual_device.h"
 #include <lua.hpp>
 #include <unistd.h>
 #include <cstdlib>
 #include <string>
 
+#define KEYLUA_RUNTIME "keylua_runtime"
 #define USER_CONFIG_REL_TO_HOME ".config/keylua/init.lua"
 
-LuaRuntime::LuaRuntime()
-    : m_lua_state{nullptr}
+#define STRIFY_(a) #a
+#define STRIFY(a) STRIFY_(a)
+#define CAT_(a, b) a ## b
+#define CAT(a, b) CAT_(a, b)
+
+#define LuaRuntime_REGISTER(L, F) lua_register(L, STRIFY(F), &dispatch<&LuaRuntime::CAT(l_, F)>)
+
+typedef int (LuaRuntime::* lfunc)(lua_State* L);
+
+template <lfunc F>
+static int dispatch(lua_State* L)
+{
+    LuaRuntime* p = *static_cast<LuaRuntime**>(lua_getextraspace(L));
+    return ((*p).*F)(L);
+}
+
+LuaRuntime::LuaRuntime(VirtualDevice& vdev_)
+    : vdev{vdev_},
+    m_lua_state{nullptr}
 {
     const char* user_home = std::getenv("HOME");
     if (!user_home)
@@ -28,6 +47,10 @@ LuaRuntime::LuaRuntime()
     auto L = m_lua_state;
     luaL_openlibs(L);
 
+    *static_cast<LuaRuntime**>(lua_getextraspace(L)) = this;
+
+    LuaRuntime_REGISTER(L, suppress);
+
     if (LUA_OK != luaL_dofile(L, user_config.c_str()))
     {
         m_errbuf = "luaL_dofile Error: " + std::string{lua_tostring(L, -1)};
@@ -42,4 +65,10 @@ LuaRuntime::~LuaRuntime()
     {
         ::lua_close(m_lua_state);
     }
+}
+
+int LuaRuntime::l_suppress(::lua_State* L)
+{
+    printf("l_suppress called\n");
+    return 0;
 }
