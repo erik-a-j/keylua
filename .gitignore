@@ -4,7 +4,6 @@ compile_commands.json
 test.cpp
 .clang-format
 Makefile
-tools
 src/bak
 CMakeLists.txt.bak
 a.out
@@ -12,3 +11,6 @@ make.sh
 plan.md
 test*.c
 test*.cpp
+input_evcodes_left.h
+tools/**
+!tools/*gperf.py

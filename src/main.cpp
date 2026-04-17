@@ -34,6 +34,18 @@ void print_device_info(const Device& d)
 int main()
 {
     LuaRuntime lr;
+    if (!lr)
+    {
+        std::cerr << lr.errmsg() << std::endl;
+    }
+    else
+    {
+        std::cout << "mapping: \n";
+        for (const auto& m : lr.mapping())
+        {
+            std::cout << "  map " << m[0] << " " << m[1] << '\n';
+        }
+    }
     return 0;
 
     struct sigaction sa {};
@@ -72,7 +84,7 @@ int main()
             }
             std::cout << "Created VirtualDevice" << std::endl;
 
-            EventPipeline evpl{dev, vdev};
+            EventPipeline evpl{dev, vdev, lr};
             if (!evpl.run(g_stop))
             {
                 std::cerr << evpl.errmsg() << std::endl;

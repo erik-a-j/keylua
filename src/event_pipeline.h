@@ -8,10 +8,11 @@
 struct input_event;
 class DeviceGrabber;
 class VirtualDevice;
+class LuaRuntime;
 
 class EventPipeline {
 public:
-    explicit EventPipeline(DeviceGrabber& dev, VirtualDevice& vdev);
+    explicit EventPipeline(DeviceGrabber& dev, VirtualDevice& vdev, LuaRuntime& lua);
 
     EventPipeline(EventPipeline&& other) = delete;
     EventPipeline& operator=(EventPipeline&&) = delete;
@@ -28,6 +29,7 @@ private:
 
     DeviceGrabber& m_dev;
     VirtualDevice& m_vdev;
+    LuaRuntime& m_lua;
     std::string m_errbuf;
 };
 

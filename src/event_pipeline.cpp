@@ -7,8 +7,8 @@
 #include <cerrno>
 #include <cstring>
 
-EventPipeline::EventPipeline(DeviceGrabber& dev, VirtualDevice& vdev)
-    : m_dev{dev}, m_vdev{vdev}
+EventPipeline::EventPipeline(DeviceGrabber& dev, VirtualDevice& vdev, LuaRuntime& lua)
+    : m_dev{dev}, m_vdev{vdev}, m_lua{lua}
 {}
 
 

@@ -25,8 +25,8 @@ static int dispatch(lua_State* L)
     return ((*p).*F)(L);
 }
 
-LuaRuntime::LuaRuntime(VirtualDevice& vdev_)
-    : vdev{vdev_},
+LuaRuntime::LuaRuntime()
+    : //vdev{vdev_},
     m_lua_state{nullptr}
 {
     const char* user_home = std::getenv("HOME");
@@ -49,7 +49,8 @@ LuaRuntime::LuaRuntime(VirtualDevice& vdev_)
 
     *static_cast<LuaRuntime**>(lua_getextraspace(L)) = this;
 
-    LuaRuntime_REGISTER(L, suppress);
+    LuaRuntime_REGISTER(L, map);
+    //LuaRuntime_REGISTER(L, suppress);
 
     if (LUA_OK != luaL_dofile(L, user_config.c_str()))
     {
@@ -67,8 +68,27 @@ LuaRuntime::~LuaRuntime()
     }
 }
 
-int LuaRuntime::l_suppress(::lua_State* L)
+int LuaRuntime::l_map(::lua_State* L)
 {
-    printf("l_suppress called\n");
+    int n = lua_gettop(L);
+    if (n != 2)
+    {
+        m_errbuf += "\nmap Error: Expected 2 arguments";
+    }
+    else if (lua_type(L, 1) != LUA_TSTRING || lua_type(L, 2) != LUA_TSTRING)
+    {
+        m_errbuf += "\nmap Error: Arguments must be strings(for now)";
+    }
+    else
+    {
+        m_map.push_back({lua_tostring(L, 1), lua_tostring(L, 2)});
+    }
     return 0;
 }
+
+/* int LuaRuntime::l_suppress(::lua_State* L)
+ {
+     printf("l_suppress called\n");
+     return 0;
+ }
+  */
