@@ -11,10 +11,11 @@ struct libevdev_uinput;
 
 class VirtualDevice {
 public:
+    VirtualDevice() = default;
     explicit VirtualDevice(const ::libevdev* src);
 
-    VirtualDevice(VirtualDevice&& other) = delete;
-    VirtualDevice& operator=(VirtualDevice&&) = delete;
+    VirtualDevice(VirtualDevice&& other);
+    VirtualDevice& operator=(VirtualDevice&& other);
     VirtualDevice(const VirtualDevice&) = delete;
     VirtualDevice& operator=(const VirtualDevice&) = delete;
 
@@ -27,7 +28,7 @@ public:
     explicit operator bool() const { return m_errbuf.empty() && m_uinput_dev != nullptr; }
     std::string_view errmsg() const { return m_errbuf; }
 private:
-    ::libevdev_uinput* m_uinput_dev;
+    ::libevdev_uinput* m_uinput_dev{nullptr};
     std::string m_errbuf;
 };
 

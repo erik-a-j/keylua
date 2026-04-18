@@ -2,6 +2,8 @@
 #define LUA_RUNTIME_H
 
 #include "event_job.h"
+#include "device_config.h"
+#include "virtual_device.h"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,28 +14,28 @@
 
 struct lua_State;
 struct input_event;
-class VirtualDevice;
 
 class LuaRuntime {
 public:
-    using EventJobMap = std::unordered_map<uint16_t, uint32_t>;
-
-    LuaRuntime(VirtualDevice& vdev, const char* config_path);
+    LuaRuntime(const char* config_path);
     ~LuaRuntime();
 
+    bool bind_device(uint32_t ref_id, VirtualDevice&& vdev);
 
     bool process_event(const ::input_event& ev);
 
-    const VirtualDevice& vdev() const { return m_vdev; }
+    //const VirtualDevice* vdev() const { return m_vdev; }
 
     const std::vector<EventJob>& jobs() const { return m_jobs; }
-    const EventJobMap& mapping() const { return m_map; }
+    const std::vector<DeviceConfig>& devices() const { return m_devices; }
 
     explicit operator bool() const { return m_errbuf.empty() && m_lua_state != nullptr; }
     std::string_view errmsg() const { return m_errbuf; }
 
 private:
-    int l_map(::lua_State* L);
+    int l_device(::lua_State* L);
+    int l_dev_map(lua_State* L);
+    //int l_map(::lua_State* L);
     int l_keydown(::lua_State* L);
     int l_keyup(::lua_State* L);
     int l_key(::lua_State* L);
@@ -46,10 +48,11 @@ private:
     uint32_t new_job(std::vector<InputAtom> atoms);
     void push_job_ref(::lua_State* L, uint32_t id);
 
+    void init_lua();
+
     ::lua_State* m_lua_state{nullptr};
-    VirtualDevice& m_vdev;
     std::vector<EventJob> m_jobs;
-    EventJobMap m_map;
+    std::vector<DeviceConfig> m_devices;
     std::string m_errbuf;
 };
 

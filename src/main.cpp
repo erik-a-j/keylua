@@ -5,6 +5,7 @@
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
 #include <string>
+#include <filesystem>
 #include <signal.h>
 #include <unistd.h>
 #include "device.h"
@@ -13,7 +14,10 @@
 #include "event_pipeline.h"
 #include "lua_runtime.h"
 
-#define USER_CONFIG_REL_TO_HOME ".config/keylua/init.lua"
+#define INIT_LUA "init.lua"
+#define USER_CONFIG_REL_TO_HOME ".config/keylua/" INIT_LUA
+
+namespace std { namespace fs = std::filesystem; }
 
 static std::atomic<bool> g_stop{false};
 static void signal_handler(int)
@@ -34,8 +38,49 @@ void print_device_info(const Device& d)
     }
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+    std::fs::path user_config;
+    if (argc == 2)
+    {
+        user_config = std::fs::path{argv[1]} / INIT_LUA;
+    }
+    else
+    {
+        const char* user_home = std::getenv("HOME");
+        if (user_home)
+        {
+            user_config = std::fs::path{user_home} / USER_CONFIG_REL_TO_HOME;
+        }
+    }
+    if (!std::fs::exists(user_config))
+    {
+        std::cerr << "config: " << user_config << " does not exist" << std::endl;
+        return 1;
+    }
+    LuaRuntime lr{user_config.c_str()};
+    if (!lr)
+    {
+        std::cerr << lr.errmsg() << std::endl;
+        return 1;
+    }
+    std::cout << "Initialized LuaRuntime" << std::endl;
+
+    for (const auto& d : lr.devices())
+    {
+        std::cout << "Device: \n  name: " << d.name
+            << "\n  vid: " << std::hex << d.vid << std::dec
+            << "\n  pid: " << std::hex << d.pid << std::dec << std::endl;
+        std::cout << "  Mappings: \n";
+        for (const auto& m : d.mappings)
+        {
+            std::cout << "    trigger: " << m.first << '\n'
+                << "    event: " << m.second << std::endl;
+        }
+    }
+
+    return 0;
+
     struct sigaction sa {};
     sa.sa_handler = signal_handler;
     sigemptyset(&sa.sa_mask);
@@ -51,13 +96,6 @@ int main()
     print_device_info(d);
 
     std::cout << std::endl;
-
-    std::string user_config;
-    const char* user_home = std::getenv("HOME");
-    if (user_home)
-    {
-        user_config = std::string{user_home} + "/" USER_CONFIG_REL_TO_HOME;
-    }
 
     for (const auto& node : d.input_interfaces())
     {
@@ -78,16 +116,6 @@ int main()
                 break;
             }
             std::cout << "Created VirtualDevice" << std::endl;
-
-
-
-            LuaRuntime lr{vdev, user_config.c_str()};
-            if (!lr)
-            {
-                std::cerr << lr.errmsg() << std::endl;
-                break;
-            }
-            std::cout << "Initialized LuaRuntime" << std::endl;
 
             EventPipeline evpl{dev, lr};
             if (!evpl.run(g_stop))

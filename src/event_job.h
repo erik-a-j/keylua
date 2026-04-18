@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <unordered_map>
 
 struct InputAtom {
     uint16_t type;
@@ -17,5 +18,7 @@ struct EventJob {
 struct EventJobRef {
     uint32_t id;
 };
+
+using EventJobMap = std::unordered_map<uint16_t, uint32_t>;
 
 #endif /* #ifndef EVENT_JOB_H */

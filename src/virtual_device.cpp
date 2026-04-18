@@ -4,7 +4,6 @@
 #include <cstring>
 
 VirtualDevice::VirtualDevice(const ::libevdev* src)
-    : m_uinput_dev{nullptr}
 {
     ::libevdev* tmpl = ::libevdev_new();
 
@@ -40,6 +39,18 @@ VirtualDevice::VirtualDevice(const ::libevdev* src)
     {
         m_errbuf = "libevdev_uinput_create_from_device Error: " + std::string{std::strerror(-err)};
     }
+}
+VirtualDevice::VirtualDevice(VirtualDevice&& other)
+    : m_uinput_dev{other.m_uinput_dev},
+    m_errbuf{other.m_errbuf}
+{
+    other.m_uinput_dev = nullptr;
+}
+VirtualDevice& VirtualDevice::operator=(VirtualDevice&& other)
+{
+    m_uinput_dev = other.m_uinput_dev;
+    other.m_uinput_dev = nullptr;
+    m_errbuf = other.m_errbuf;
 }
 VirtualDevice::~VirtualDevice()
 {
