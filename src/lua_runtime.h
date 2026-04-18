@@ -1,35 +1,55 @@
 #ifndef LUA_RUNTIME_H
 #define LUA_RUNTIME_H
 
+#include "event_job.h"
 #include <string>
 #include <string_view>
 #include <vector>
 #include <array>
 #include <memory>
+#include <unordered_map>
+#include <utility>
 
-class VirtualDevice;
 struct lua_State;
+struct input_event;
+class VirtualDevice;
 
 class LuaRuntime {
 public:
-    //bool suppress{false};
-    //VirtualDevice& vdev;
+    using EventJobMap = std::unordered_map<uint16_t, uint32_t>;
 
-    LuaRuntime();
+    LuaRuntime(VirtualDevice& vdev, const char* config_path);
     ~LuaRuntime();
 
-    const std::vector<std::array<std::string, 2>>& mapping() const { return m_map; }
+
+    bool process_event(const ::input_event& ev);
+
+    const VirtualDevice& vdev() const { return m_vdev; }
+
+    const std::vector<EventJob>& jobs() const { return m_jobs; }
+    const EventJobMap& mapping() const { return m_map; }
 
     explicit operator bool() const { return m_errbuf.empty() && m_lua_state != nullptr; }
     std::string_view errmsg() const { return m_errbuf; }
 
 private:
-
     int l_map(::lua_State* L);
+    int l_keydown(::lua_State* L);
+    int l_keyup(::lua_State* L);
+    int l_key(::lua_State* L);
+    int impl_key(::lua_State* L, const char* fname, int32_t key_action);
     //int l_suppress(::lua_State* L);
 
-    ::lua_State* m_lua_state;
-    std::vector<std::array<std::string, 2>> m_map;
+    bool do_emit_key(const char* key, int value);
+    int emit_key(::lua_State* L, const char* fname, int value);
+
+    uint32_t new_job(std::vector<InputAtom> atoms);
+    void push_job_ref(::lua_State* L, uint32_t id);
+
+    ::lua_State* m_lua_state{nullptr};
+    VirtualDevice& m_vdev;
+    std::vector<EventJob> m_jobs;
+    EventJobMap m_map;
     std::string m_errbuf;
 };
 

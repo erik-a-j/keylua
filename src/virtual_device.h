@@ -3,10 +3,11 @@
 
 #include <string>
 #include <string_view>
+#include <cstdint>
+#include <linux/input.h>
 
 struct libevdev;
 struct libevdev_uinput;
-struct input_event;
 
 class VirtualDevice {
 public:
@@ -21,7 +22,7 @@ public:
 
     void close();
 
-    bool emit(const ::input_event& ev);
+    bool emit(uint16_t type, uint16_t code, int32_t value);
 
     explicit operator bool() const { return m_errbuf.empty() && m_uinput_dev != nullptr; }
     std::string_view errmsg() const { return m_errbuf; }

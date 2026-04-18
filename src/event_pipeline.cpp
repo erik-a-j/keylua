@@ -2,13 +2,14 @@
 #include "event_pipeline.h"
 #include "device_grabber.h"
 #include "virtual_device.h"
+#include "lua_runtime.h"
 #include <libevdev/libevdev.h>
 #include <sys/epoll.h>
 #include <cerrno>
 #include <cstring>
 
-EventPipeline::EventPipeline(DeviceGrabber& dev, VirtualDevice& vdev, LuaRuntime& lua)
-    : m_dev{dev}, m_vdev{vdev}, m_lua{lua}
+EventPipeline::EventPipeline(DeviceGrabber& dev, LuaRuntime& lua)
+    : m_dev{dev}, m_lua{lua}
 {}
 
 
@@ -53,9 +54,8 @@ bool EventPipeline::run(std::atomic<bool>& stop)
                 {
                     while ((rc = libevdev_next_event(m_dev.dev(), LIBEVDEV_READ_FLAG_SYNC, &ie)) >= 0)
                     {
-                        if (!this->process_event(ie))
+                        if (!m_lua.process_event(ie))
                         {
-                            m_errbuf = m_vdev.errmsg();
                             status = false;
                             break;
                         }
@@ -64,9 +64,8 @@ bool EventPipeline::run(std::atomic<bool>& stop)
                 }
                 else // LIBEVDEV_READ_STATUS_SUCCESS
                 {
-                    if (!this->process_event(ie))
+                    if (!m_lua.process_event(ie))
                     {
-                        m_errbuf = m_vdev.errmsg();
                         status = false;
                         break;
                     }
@@ -77,10 +76,3 @@ bool EventPipeline::run(std::atomic<bool>& stop)
     ::close(epfd);
     return status;
 }
-
-bool EventPipeline::process_event(const::input_event& ev)
-{
-    return m_vdev.emit(ev);
-}
-
-

@@ -1,7 +1,6 @@
 
 #include "virtual_device.h"
 #include <libevdev/libevdev-uinput.h>
-#include <linux/input.h>
 #include <cstring>
 
 VirtualDevice::VirtualDevice(const ::libevdev* src)
@@ -19,7 +18,7 @@ VirtualDevice::VirtualDevice(const ::libevdev* src)
     {
         if (!::libevdev_has_event_type(src, type)) continue;
         ::libevdev_enable_event_type(tmpl, type);
-        for (unsigned int code = 0; code < static_cast<unsigned int>(libevdev_event_type_get_max(type)); code++)
+        for (unsigned int code = 0; code < static_cast<unsigned int>(::libevdev_event_type_get_max(type)); code++)
         {
             if (!::libevdev_has_event_code(src, type, code)) continue;
             if (type == EV_ABS)
@@ -54,12 +53,13 @@ void VirtualDevice::close()
     }
 }
 
-bool VirtualDevice::emit(const ::input_event& ev)
+bool VirtualDevice::emit(uint16_t type, uint16_t code, int32_t value)
 {
-    int err = ::libevdev_uinput_write_event(m_uinput_dev, ev.type, ev.code, ev.value);
+
+    int err = ::libevdev_uinput_write_event(m_uinput_dev, type, code, value);
     if (err != 0)
     {
-        m_errbuf = "libevdev_uinput_write_event Error: " + std::string{std::strerror(-err)};
+        m_errbuf += "\nlibevdev_uinput_write_event Error: " + std::string{std::strerror(-err)};
     }
     return err == 0;
 }

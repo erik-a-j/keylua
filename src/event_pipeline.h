@@ -12,7 +12,7 @@ class LuaRuntime;
 
 class EventPipeline {
 public:
-    explicit EventPipeline(DeviceGrabber& dev, VirtualDevice& vdev, LuaRuntime& lua);
+    explicit EventPipeline(DeviceGrabber& dev, LuaRuntime& lua);
 
     EventPipeline(EventPipeline&& other) = delete;
     EventPipeline& operator=(EventPipeline&&) = delete;
@@ -22,13 +22,11 @@ public:
     bool run(std::atomic<bool>& stop);
     //void request_stop();
 
-    explicit operator bool() const { return m_errbuf.empty(); }
-    std::string_view errmsg() const { return m_errbuf; }
+    explicit operator bool() const { return m_errbuf.empty() && m_dev.errmsg().empty() && m_lua.errmsg().empty() && m_lua.vdev().errmsg().empty(); }
+    std::string errmsg() const { return m_errbuf + std::string{m_dev.errmsg()} + std::string{m_lua.errmsg()} + std::string{m_lua.vdev().errmsg()}; }
 private:
-    bool process_event(const ::input_event& ev);
 
     DeviceGrabber& m_dev;
-    VirtualDevice& m_vdev;
     LuaRuntime& m_lua;
     std::string m_errbuf;
 };

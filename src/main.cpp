@@ -1,5 +1,6 @@
 
 #include <fcntl.h>
+#include <cstdlib>
 #include <iostream>
 #include <libevdev/libevdev-uinput.h>
 #include <libevdev/libevdev.h>
@@ -11,6 +12,8 @@
 #include "virtual_device.h"
 #include "event_pipeline.h"
 #include "lua_runtime.h"
+
+#define USER_CONFIG_REL_TO_HOME ".config/keylua/init.lua"
 
 static std::atomic<bool> g_stop{false};
 static void signal_handler(int)
@@ -33,21 +36,6 @@ void print_device_info(const Device& d)
 
 int main()
 {
-    LuaRuntime lr;
-    if (!lr)
-    {
-        std::cerr << lr.errmsg() << std::endl;
-    }
-    else
-    {
-        std::cout << "mapping: \n";
-        for (const auto& m : lr.mapping())
-        {
-            std::cout << "  map " << m[0] << " " << m[1] << '\n';
-        }
-    }
-    return 0;
-
     struct sigaction sa {};
     sa.sa_handler = signal_handler;
     sigemptyset(&sa.sa_mask);
@@ -64,9 +52,16 @@ int main()
 
     std::cout << std::endl;
 
+    std::string user_config;
+    const char* user_home = std::getenv("HOME");
+    if (user_home)
+    {
+        user_config = std::string{user_home} + "/" USER_CONFIG_REL_TO_HOME;
+    }
+
     for (const auto& node : d.input_interfaces())
     {
-        if (node.type() == InputInterface::Type::Mouse)
+        if (node.type() == InputInterface::Type::Keyboard)
         {
             DeviceGrabber dev{node.devnode()};
             if (!dev)
@@ -84,7 +79,17 @@ int main()
             }
             std::cout << "Created VirtualDevice" << std::endl;
 
-            EventPipeline evpl{dev, vdev, lr};
+
+
+            LuaRuntime lr{vdev, user_config.c_str()};
+            if (!lr)
+            {
+                std::cerr << lr.errmsg() << std::endl;
+                break;
+            }
+            std::cout << "Initialized LuaRuntime" << std::endl;
+
+            EventPipeline evpl{dev, lr};
             if (!evpl.run(g_stop))
             {
                 std::cerr << evpl.errmsg() << std::endl;
