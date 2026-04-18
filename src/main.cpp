@@ -25,21 +25,28 @@ static void signal_handler(int)
     g_stop.store(true);
 }
 
-void print_device_info(const Device& d)
-{
-    std::cout << "- Product:Vendor: " << d.pid() << ':' << d.vid() << '\n'
-        << "  - Event Nodes:\n";
-    for (const auto& node : d.input_interfaces())
-    {
-        std::cout << "    - Name: " << node.name() << '\n'
-            << "      Path: " << node.devpath() << '\n'
-            << "      Node: " << node.devnode() << '\n'
-            << "      Type: " << node.typestr() << '\n';
-    }
-}
+/* void print_device_info(const Device& d)
+ {
+     std::cout << "- Product:Vendor: " << d.pid() << ':' << d.vid() << '\n'
+         << "  - Event Nodes:\n";
+     for (const auto& node : d.input_interfaces())
+     {
+         std::cout << "    - Name: " << node.name() << '\n'
+             << "      Path: " << node.devpath() << '\n'
+             << "      Node: " << node.devnode() << '\n'
+             << "      Type: " << node.typestr() << '\n';
+     }
+ } */
 
 int main(int argc, char* argv[])
 {
+    struct sigaction sa {};
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGTERM, &sa, nullptr);
+
     std::fs::path user_config;
     if (argc == 2)
     {
@@ -58,15 +65,16 @@ int main(int argc, char* argv[])
         std::cerr << "config: " << user_config << " does not exist" << std::endl;
         return 1;
     }
-    LuaRuntime lr{user_config.c_str()};
-    if (!lr)
+
+    LuaRuntime lua{user_config.c_str()};
+    if (!lua)
     {
-        std::cerr << lr.errmsg() << std::endl;
+        std::cerr << lua.errmsg() << std::endl;
         return 1;
     }
     std::cout << "Initialized LuaRuntime" << std::endl;
 
-    for (const auto& d : lr.devices())
+    for (const auto& d : lua.devices())
     {
         std::cout << "Device: \n  name: " << d.name
             << "\n  vid: " << std::hex << d.vid << std::dec
@@ -79,53 +87,62 @@ int main(int argc, char* argv[])
         }
     }
 
-    return 0;
-
-    struct sigaction sa {};
-    sa.sa_handler = signal_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, nullptr);
-    sigaction(SIGTERM, &sa, nullptr);
+    EventPipeline pipeline{lua};
+    if (!pipeline)
+    {
+        std::cerr << pipeline.errmsg() << std::endl;
+        return 1;
+    }
 
     udev* udev = udev_new();
+    std::vector<DeviceGrabber> grabbers;
+    std::vector<VirtualDevice> vdevices;
+    grabbers.reserve(lua.devices().size());
+    vdevices.reserve(lua.devices().size());
 
-    const char* vid = "1532";
-    const char* pid = "0015";
-    Device d{udev, vid, pid};
-    print_device_info(d);
-
-    std::cout << std::endl;
-
-    for (const auto& node : d.input_interfaces())
+    for (uint32_t id = 0; id < lua.devices().size(); ++id)
     {
-        if (node.type() == InputInterface::Type::Keyboard)
+        const auto& cfg = lua.devices()[id];
+
+        Device d{udev, cfg.vid, cfg.pid, cfg.iface};
+        if (!d)
         {
-            DeviceGrabber dev{node.devnode()};
-            if (!dev)
-            {
-                std::cerr << dev.errmsg() << std::endl;
-                break;
-            }
-            std::cout << "Grabbed: " << node.devnode() << " Type: " << node.type() << std::endl;
-
-            VirtualDevice vdev{dev.dev()};
-            if (!vdev)
-            {
-                std::cerr << vdev.errmsg() << std::endl;
-                break;
-            }
-            std::cout << "Created VirtualDevice" << std::endl;
-
-            EventPipeline evpl{dev, lr};
-            if (!evpl.run(g_stop))
-            {
-                std::cerr << evpl.errmsg() << std::endl;
-                break;
-            }
-
-            std::cout << "Ungrabbed: " << node.devnode() << std::endl;
+            std::cerr << "could not find device: " << std::hex << cfg.vid << ':' << cfg.pid << std::dec << " type=" << d.typestr() << std::endl;
+            continue;
         }
+
+        grabbers.emplace_back(d.devnode());
+        auto& g = grabbers.back();
+        if (!g)
+        {
+            std::cerr << g.errmsg() << std::endl;
+            continue;
+        }
+
+        vdevices.emplace_back(g.dev());
+        auto& v = vdevices.back();
+        if (!v)
+        {
+            std::cerr << v.errmsg() << std::endl;
+            continue;
+        }
+
+        if (!lua.add_virtual_device(v, id))
+        {
+            std::cerr << lua.errmsg() << std::endl;
+            continue;
+        }
+
+        if (!pipeline.add_device(g, id))
+        {
+            std::cerr << pipeline.errmsg() << std::endl;
+            continue;
+        }
+    }
+
+    if (!pipeline.run(g_stop))
+    {
+        std::cerr << pipeline.errmsg() << std::endl;
     }
 
     udev_unref(udev);

@@ -48,9 +48,13 @@ VirtualDevice::VirtualDevice(VirtualDevice&& other)
 }
 VirtualDevice& VirtualDevice::operator=(VirtualDevice&& other)
 {
-    m_uinput_dev = other.m_uinput_dev;
-    other.m_uinput_dev = nullptr;
-    m_errbuf = other.m_errbuf;
+    if (this != &other)
+    {
+        m_uinput_dev = other.m_uinput_dev;
+        other.m_uinput_dev = nullptr;
+        m_errbuf = other.m_errbuf;
+    }
+    return *this;
 }
 VirtualDevice::~VirtualDevice()
 {

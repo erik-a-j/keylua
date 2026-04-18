@@ -20,9 +20,9 @@ public:
     LuaRuntime(const char* config_path);
     ~LuaRuntime();
 
-    bool bind_device(uint32_t ref_id, VirtualDevice&& vdev);
+    bool add_virtual_device(VirtualDevice& v, uint32_t ref_id);
 
-    bool process_event(const ::input_event& ev);
+    bool process_event(uint32_t device_id, const ::input_event& ev);
 
     //const VirtualDevice* vdev() const { return m_vdev; }
 

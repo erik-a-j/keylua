@@ -1,8 +1,11 @@
 ---@meta keylua
 
+---@alias keylua.IfaceType "keyboard" | "mouse"
+
 ---@class keylua.DeviceConfig
 ---@field vid integer
 ---@field pid integer
+---@field iface keylua.IfaceType
 ---@field name? string
 
 ---@class keylua.Device

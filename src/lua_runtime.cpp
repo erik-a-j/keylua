@@ -73,14 +73,14 @@ LuaRuntime::~LuaRuntime()
     }
 }
 
-bool LuaRuntime::bind_device(uint32_t ref_id, VirtualDevice&& vdev)
+bool LuaRuntime::add_virtual_device(VirtualDevice& v, uint32_t ref_id)
 {
     if (ref_id >= m_devices.size())
     {
         m_errbuf += "\nbind_device Error: ref_id >= number of devices";
         return false;
     }
-    m_devices[ref_id].vdev = std::move(vdev);
+    m_devices[ref_id].vdev = &v;
     return true;
 }
 
@@ -97,10 +97,37 @@ void LuaRuntime::push_job_ref(::lua_State* L, uint32_t id)
     ::luaL_setmetatable(L, KEYLUA_EVENTJOB_MT);
 }
 
-bool LuaRuntime::process_event(const::input_event& ev)
+bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
 {
-    //return m_vdev ? m_vdev->emit(ev.type, ev.code, ev.value) : false;
+    DeviceConfig& dev_cfg = m_devices[device_id];
+    if (dev_cfg.vdev == nullptr)
+    {
+        m_errbuf = "process_event Error: virtual device not set";
+        return false;
+    }
+
+    if (ev.type == EV_KEY)
+    {
+        auto it = dev_cfg.mappings.find(ev.code);
+        if (it != dev_cfg.mappings.end())
+        {
+            const EventJob& job = m_jobs[it->second];
+            for (const InputAtom& atom : job.atoms)
+            {
+                if (!dev_cfg.vdev->emit(atom.type, atom.code, atom.value))
+                    return false;
+            }
+            return dev_cfg.vdev->emit(EV_SYN, SYN_REPORT, 0);
+        }
+    }
+
+    return dev_cfg.vdev->emit(ev.type, ev.code, ev.value);
 }
+
+/* bool LuaRuntime::process_event(const::input_event& ev)
+ {
+     //return m_vdev ? m_vdev->emit(ev.type, ev.code, ev.value) : false;
+ } */
 
 int LuaRuntime::l_device(::lua_State* L)
 {
@@ -123,6 +150,25 @@ int LuaRuntime::l_device(::lua_State* L)
     }
     cfg.pid = static_cast<uint16_t>(lua_tointeger(L, -1));
     lua_pop(L, 1);
+
+    ::lua_getfield(L, 1, "iface");
+    if (!::lua_isstring(L, -1))
+    {
+        return ::luaL_error(L, "device: 'iface' must be a string");
+    }
+    const char* iface = lua_tostring(L, -1);
+    if (0 == std::strcmp(iface, "keyboard"))
+    {
+        cfg.iface = DeviceType::Keyboard;
+    }
+    else if (0 == std::strcmp(iface, "mouse"))
+    {
+        cfg.iface = DeviceType::Mouse;
+    }
+    else
+    {
+        return ::luaL_error(L, "device: 'iface' must be either \"keyboard\" or \"mouse\"");
+    }
 
     ::lua_getfield(L, 1, "name");
     cfg.name = ::lua_isstring(L, -1) ? lua_tostring(L, -1) : "keylua virtual device";

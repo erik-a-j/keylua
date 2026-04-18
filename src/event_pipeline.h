@@ -3,30 +3,42 @@
 
 #include "device_grabber.h"
 #include "lua_runtime.h"
+#include <vector>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <atomic>
 
-struct input_event;
+struct Watch {
+    DeviceGrabber* grabber;
+    uint32_t device_id;
+};
 
 class EventPipeline {
 public:
-    explicit EventPipeline(DeviceGrabber& dev, LuaRuntime& lua);
+    explicit EventPipeline(LuaRuntime& lua);
 
     EventPipeline(EventPipeline&& other) = delete;
     EventPipeline& operator=(EventPipeline&&) = delete;
     EventPipeline(const EventPipeline&) = delete;
     EventPipeline& operator=(const EventPipeline&) = delete;
 
-    bool run(std::atomic<bool>& stop);
-    //void request_stop();
+    ~EventPipeline();
 
-    explicit operator bool() const { return m_errbuf.empty() && m_dev.errmsg().empty() && m_lua.errmsg().empty() && m_lua.vdev()->errmsg().empty(); }
-    std::string errmsg() const { return m_errbuf + std::string{m_dev.errmsg()} + std::string{m_lua.errmsg()} + std::string{m_lua.vdev()->errmsg()}; }
+    bool add_device(DeviceGrabber& g, uint32_t ref_id);
+
+    bool run(std::atomic<bool>& stop);
+
+    explicit operator bool() const { return m_errbuf.empty() && m_lua.errmsg().empty(); }
+    std::string errmsg() const { return m_errbuf + std::string{m_lua.errmsg()}; }
+
 private:
 
-    DeviceGrabber& m_dev;
+    bool drain(Watch& w);
+
     LuaRuntime& m_lua;
+    int m_epfd{-1};
+    std::vector<std::unique_ptr<Watch>> m_watches;
     std::string m_errbuf;
 };
 
