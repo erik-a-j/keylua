@@ -8,32 +8,6 @@
 #include <memory>
 #include <libudev.h>
 
-/* class InputInterface {
- public:
-     enum Type { Keyboard, Mouse };
-
-     explicit InputInterface(::udev_device* udev_dev, Type type);
-
-     InputInterface(InputInterface&& other);
-     InputInterface& operator=(InputInterface&&) = delete;
-     InputInterface(const InputInterface&) = delete;
-     InputInterface& operator=(const InputInterface&) = delete;
-
-     std::string_view name() const;
-     std::string_view devpath() const;
-     std::string_view devnode() const;
-     std::string_view typestr() const { return m_typestr[m_type]; }
-     Type type() const { return m_type; }
-
- private:
-     ::udev_device* udev_parent() const;
-
-     std::unique_ptr<::udev_device, decltype(&::udev_device_unref)> m_udev_dev;
-     Type m_type;
-     static constexpr std::string_view m_typestr[2]{"keyboard", "mouse"};
-     static constexpr std::string_view m_unknown{"<unknown>"};
- }; */
-
 enum class DeviceType { Keyboard, Mouse };
 
 class Device {
@@ -62,7 +36,6 @@ private:
     uint16_t m_pid;
     DeviceType m_type;
     std::unique_ptr<::udev_device, decltype(&::udev_device_unref)> m_udev_dev{nullptr, &::udev_device_unref};
-    //std::vector<InputInterface> m_input_interfaces;
     static constexpr std::string_view m_typestr[2]{"keyboard", "mouse"};
     static constexpr std::string_view m_unknown{"<unknown>"};
 };

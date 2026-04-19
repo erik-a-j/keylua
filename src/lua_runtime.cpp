@@ -124,11 +124,6 @@ bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
     return dev_cfg.vdev->emit(ev.type, ev.code, ev.value);
 }
 
-/* bool LuaRuntime::process_event(const::input_event& ev)
- {
-     //return m_vdev ? m_vdev->emit(ev.type, ev.code, ev.value) : false;
- } */
-
 int LuaRuntime::l_device(::lua_State* L)
 {
     ::luaL_checktype(L, 1, LUA_TTABLE);
@@ -214,48 +209,6 @@ int LuaRuntime::l_dev_map(lua_State* L)
     dev.mappings[trigger_code] = job_id;
     return 0;
 }
-
-/* int LuaRuntime::l_map(::lua_State* L)
- {
-     if (::lua_gettop(L) != 2)
-     {
-         return ::luaL_error(L, "map: expected 2 arguments, got %d", ::lua_gettop(L));
-     }
-
-     const char* trigger = luaL_checkstring(L, 1);
-     const keyword* kw = symbol_to_evcode(trigger);
-     if (!kw)
-     {
-         return ::luaL_error(L, "map: unknown key '%s'", trigger);
-     }
-
-     uint16_t trigger_code = static_cast<uint16_t>(kw->code);
-     uint32_t job_id;
-
-     if (::lua_type(L, 2) == LUA_TSTRING)
-     {
-         // Shorthand: "KEY_A" becomes a press+release job.
-         const char* name = lua_tostring(L, 2);
-         kw = symbol_to_evcode(name);
-         if (!kw)
-         {
-             return ::luaL_error(L, "map: unknown key '%s'", name);
-         }
-         job_id = new_job({
-             { EV_KEY, static_cast<uint16_t>(kw->code), 1 },
-             { EV_KEY, static_cast<uint16_t>(kw->code), 0 },
-         });
-     }
-     else
-     {
-         // Full form: an EventJob userdata.
-         auto* ref = static_cast<EventJobRef*>(::luaL_checkudata(L, 2, KEYLUA_EVENTJOB_MT));
-         job_id = ref->id;
-     }
-
-     m_map[trigger_code] = job_id;
-     return 0;
- } */
 
 #define KEYACTION_PRESS (1 << 0)
 #define KEYACTION_RELEASE (1 << 1)
