@@ -1,6 +1,7 @@
 ---@meta keylua
 
 ---@alias keylua.IfaceType "keyboard" | "mouse"
+---@alias keylua.KeyName
 
 ---@class keylua.DeviceConfig
 ---@field vid integer
@@ -20,26 +21,6 @@ local Device = {}
 function device(config) end
 
 ---Bind a trigger key to an action.
----@param trigger string  Key name that fires the mapping
----@param action string|keylua.EventJob  Either a key name (shorthand for press+release) or a job built with key()/keydown()/keyup()
+---@param trigger keylua.KeyName  Key name that fires the mapping
+---@param action keylua.KeyName|keylua.EventJob  Either a key name (shorthand for press+release) or a job built with key()/keydown()/keyup()
 function Device:map(trigger, action) end
-
----Bind a trigger key to an action.
----@param trigger string  Key name that fires the mapping
----@param action string|keylua.EventJob  Either a key name (shorthand for press+release) or a job built with key()/keydown()/keyup()
-function map(trigger, action) end
-
----Create a key-down-only job.
----@param name string
----@return keylua.EventJob
-function keydown(name) end
-
----Create a key-up-only job.
----@param name string
----@return keylua.EventJob
-function keyup(name) end
-
----Create a press+release job for the given key.
----@param name string  Key name, e.g. "KEY_A" or "a"
----@return keylua.EventJob
-function key(name) end

@@ -45,7 +45,7 @@ private:
     bool do_emit_key(const char* key, int value);
     int emit_key(::lua_State* L, const char* fname, int value);
 
-    uint32_t new_job(std::vector<InputAtom> atoms);
+    uint32_t new_job(std::vector<InputAtom>&& atoms);
     void push_job_ref(::lua_State* L, uint32_t id);
 
     void init_lua();

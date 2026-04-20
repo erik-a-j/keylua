@@ -14,11 +14,17 @@ pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua)
 
 set(GENERATE_PY ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate.py)
 
-set(GPERF_DIR ${CMAKE_CURRENT_BINARY_DIR}/gperf)
-set(EVENT_CODES_MAP_GPERF ${GPERF_DIR}/event_codes_map.gperf)
-set(EVENT_CODES_MAP_CPP ${GPERF_DIR}/event_codes_map.cpp)
-set(EVENT_CODES_MAP_H ${GPERF_DIR}/event_codes_map.h)
-set(GENERATE_PY_OUTPUT ${EVENT_CODES_MAP_GPERF} ${EVENT_CODES_MAP_CPP} ${EVENT_CODES_MAP_H})
+set(BUILD_GPERF_DIR ${CMAKE_CURRENT_BINARY_DIR}/gperf)
+set(EVENT_CODES_MAP_GPERF ${BUILD_GPERF_DIR}/event_codes_map.gperf)
+set(EVENT_CODES_MAP_CPP ${BUILD_GPERF_DIR}/event_codes_map.cpp)
+set(EVENT_CODES_MAP_H ${BUILD_GPERF_DIR}/event_codes_map.h)
+
+set(BUILD_KEYLUA_DIR ${CMAKE_CURRENT_BINARY_DIR}/types)
+set(KEYLUA_TEMPLATE_LUA ${CMAKE_CURRENT_SOURCE_DIR}/types/keylua.lua)
+set(KEYLUA_LUA ${BUILD_KEYLUA_DIR}/keylua.lua)
+
+set(GENERATE_PY_OUTPUT ${EVENT_CODES_MAP_GPERF} ${EVENT_CODES_MAP_CPP} ${EVENT_CODES_MAP_H} ${KEYLUA_LUA})
+set(GPERF_ITERATIONS 100)
 
 set(SRC_FILES 
     src/main.cpp
@@ -32,7 +38,7 @@ set(SRC_FILES
 
 add_custom_command(
     OUTPUT ${GENERATE_PY_OUTPUT}
-    COMMAND python3 ${GENERATE_PY} ${EVENT_CODES_MAP_GPERF}
+    COMMAND python3 ${GENERATE_PY} --gperf ${EVENT_CODES_MAP_GPERF} --iterations ${GPERF_ITERATIONS} --lua-in ${KEYLUA_TEMPLATE_LUA} --lua-out ${KEYLUA_LUA}
     DEPENDS ${GENERATE_PY}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     VERBATIM
@@ -40,7 +46,7 @@ add_custom_command(
 
 add_executable(keylua ${SRC_FILES})
 
-target_include_directories(keylua PRIVATE src ${GPERF_DIR})
+target_include_directories(keylua PRIVATE src ${BUILD_GPERF_DIR})
 target_link_libraries(keylua PkgConfig::EVDEV PkgConfig::UDEV PkgConfig::LUA)
 target_compile_options(keylua PRIVATE 
     -Wall -Wextra -Werror -pedantic-errors -Wsign-conversion
