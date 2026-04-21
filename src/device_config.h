@@ -3,7 +3,12 @@
 
 #include "device.h"
 #include "event_job.h"
+#include <array>
 #include <string>
+#include <optional>
+#include <unordered_map>
+
+using EventJobMap = std::unordered_map<uint16_t, std::array<std::optional<uint32_t>, 3>>;
 
 class VirtualDevice;
 

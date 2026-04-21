@@ -14,6 +14,8 @@ PRINT_GENERATED = "tools/generate.py: {}"
 class MapClassInfo(NamedTuple):
     name: str
     f_hash_name: str
+    f_table_size_name: str
+    f_table_name: str
     f_lookup_name: str
     f_mylookup_name: str
 
@@ -37,6 +39,7 @@ class GenInfo:
     map_class: MapClassInfo
     kw_struct: KwStructInfo
 
+    gperf_word_array_name: str
     gperf_iterations: int
     gperf_pairs: list[tuple[str, str]]
     iec_all_evcodes: list[str] = field(default_factory=list)
@@ -61,6 +64,7 @@ def generate_gperf(x: GenInfo) -> None:
 %struct-type
 %omit-struct-type
 %7bit
+%global-table
 %readonly-tables
 %compare-strncmp
 %compare-lengths
@@ -68,6 +72,8 @@ def generate_gperf(x: GenInfo) -> None:
 %define class-name {x.map_class.name}
 %define hash-function-name {x.map_class.f_hash_name}
 %define lookup-function-name {x.map_class.f_lookup_name}
+%define word-array-name {x.gperf_word_array_name}
+%define initializer-suffix ,-1
 %{{
 #include "{x.out_h.name}"
 %}}
@@ -85,6 +91,18 @@ def generate_gperf(x: GenInfo) -> None:
         print(PRINT_GENERATED.format(x.out_gperf))
 
 def generate_cpp(x: GenInfo) -> list[str]:
+
+    table_functions = f"""\
+size_t {x.map_class.name}::{x.map_class.f_table_size_name}()
+{{
+    return sizeof({x.gperf_word_array_name}) / sizeof(*{x.gperf_word_array_name});
+}}
+const struct {x.kw_struct.name}* {x.map_class.name}::{x.map_class.f_table_name}()
+{{
+    return {x.gperf_word_array_name};
+}}
+"""
+
     res: subprocess.CompletedProcess = subprocess.run(
         ["gperf", "-m", str(x.gperf_iterations), str(x.out_gperf)], capture_output=True, text=True
     )
@@ -100,21 +118,18 @@ def generate_cpp(x: GenInfo) -> list[str]:
         i = 0
         while i < len(lines):
             if class_start_match.match(lines[i]):
-                try:
-                    depth = 0
-                    for j, line in enumerate(lines[i:], start=i):
-                        depth += line.count('{') - line.count('}')
-                        if depth == 0 and j > i:
-                            class_end = j + 1
-                            break
-                    class_start = i
-                    i = class_end
-                except ValueError as e:
-                    print("Error:",e)
-                    exit(1)
+                depth = 0
+                for j, line in enumerate(lines[i:], start=i):
+                    depth += line.count('{') - line.count('}')
+                    if depth == 0 and j > i:
+                        class_end = j + 1
+                        break
+                class_start = i
+                i = class_end
             else:
-                f.write(f"{lines[i]}")
+                f.write(lines[i])
                 i += 1
+        f.write(table_functions)
     
     print(PRINT_GENERATED.format(x.out_cpp))
     return lines[class_start:class_end]
@@ -122,19 +137,23 @@ def generate_cpp(x: GenInfo) -> list[str]:
 def generate_h(x: GenInfo, decl_lines: list[str]) -> None:
     hguard = f"{x.out_h.stem.upper()}_H"
 
-    m_return_type = "return_type"
+    m_indent = "indent"
     m_str_param_type = "str_param_type"
     m_str_param_name = "str_param_name"
-    lookup_decl_re = re.compile(rf"(?P<{m_return_type}>.*struct\s*{x.kw_struct.name}\s*\*\s*){x.map_class.f_lookup_name}\s*\((?P<{m_str_param_type}>const\s+char\s*\*\s*)(?P<{m_str_param_name}>\w+).*\);")
+    lookup_decl_re = re.compile(rf"(?P<{m_indent}>^\s*).*struct\s+{x.kw_struct.name}\s*\*\s*{x.map_class.f_lookup_name}\s*\((?P<{m_str_param_type}>const\s+char\s*\*\s*)(?P<{m_str_param_name}>\w+).*\);")
     i = 0
     while i < len(decl_lines):
         m = lookup_decl_re.search(decl_lines[i])
         if m is not None:
-            return_type = m.group(m_return_type)
+            indent = m.group(m_indent)
             str_param_type = m.group(m_str_param_type)
             str_param_name = m.group(m_str_param_name)
-            mylookup_decl = f"{return_type}{x.map_class.f_mylookup_name}({str_param_type}{str_param_name}) {{ return {x.map_class.f_lookup_name}({str_param_name}, std::strlen({str_param_name})); }}\n"
-            decl_lines.insert(i + 1, mylookup_decl)
+
+            table_size_decl = f"{indent}static size_t {x.map_class.f_table_size_name}();\n"
+            table_decl = f"{indent}static const struct {x.kw_struct.name}* {x.map_class.f_table_name}();\n"
+            mylookup = f"{indent}static const struct {x.kw_struct.name}* {x.map_class.f_mylookup_name}({str_param_type}{str_param_name}) {{ return {x.map_class.f_lookup_name}({str_param_name}, std::strlen({str_param_name})); }}\n"
+            decl_lines[i:i] = [table_size_decl, table_decl, mylookup]
+
             break
         i += 1
 
@@ -165,10 +184,6 @@ def generate_lua(x: GenInfo) -> None:
                     f.write(f'---| "{k}"\n')
 
     print(PRINT_GENERATED.format(x.out_lua))
-        
-
-
-
 
 def main(gperf: Path, gperf_iterations: int, lua_in: Path, lua_out: Path) -> None:
 
@@ -182,6 +197,8 @@ def main(gperf: Path, gperf_iterations: int, lua_in: Path, lua_out: Path) -> Non
         map_class=MapClassInfo(
             name="".join([word.capitalize() for word in gperf.stem.split("_")]),
             f_hash_name="hash",
+            f_table_size_name="table_size",
+            f_table_name="table",
             f_lookup_name="lookupn",
             f_mylookup_name="lookup"
         ),
@@ -189,6 +206,8 @@ def main(gperf: Path, gperf_iterations: int, lua_in: Path, lua_out: Path) -> Non
             name="keyword",
             slot_name="key"
         ),
+
+        gperf_word_array_name="wordlist",
         gperf_iterations=gperf_iterations,
         gperf_pairs=[
             ('1', 'KEY_1'),

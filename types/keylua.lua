@@ -9,12 +9,16 @@
 ---@field iface keylua.IfaceType
 ---@field name? string
 
----@class keylua.Device
-local Device = {}
-
 ---Opaque handle to a sequence of input events. Produced by key(), keydown(),
 ---keyup(), and consumed by map().
 ---@class keylua.EventJob
+
+---@class keylua.TriggerConfig
+---@field on_press? keylua.EventJob|function
+---@field on_release? keylua.EventJob|function
+
+---@class keylua.Device
+local Device = {}
 
 ---@param config keylua.DeviceConfig
 ---@return keylua.Device
@@ -22,5 +26,20 @@ function device(config) end
 
 ---Bind a trigger key to an action.
 ---@param trigger keylua.KeyName  Key name that fires the mapping
----@param action keylua.KeyName|keylua.EventJob  Either a key name (shorthand for press+release) or a job built with key()/keydown()/keyup()
+---@param action keylua.KeyName|keylua.TriggerConfig|function  Either a keylua.KeyName (shorthand for press+release) or a keylua.TriggerConfig table
 function Device:map(trigger, action) end
+
+---Create a key-down-only job.
+---@param name keylua.KeyName  Key name, e.g. "KEY_A" or "a"
+---@return keylua.EventJob
+function keydown(name) end
+
+---Create a key-up-only job.
+---@param name keylua.KeyName  Key name, e.g. "KEY_A" or "a"
+---@return keylua.EventJob
+function keyup(name) end
+
+---Create a press+release job for the given key.
+---@param name keylua.KeyName  Key name, e.g. "KEY_A" or "a"
+---@return keylua.EventJob
+function key(name) end

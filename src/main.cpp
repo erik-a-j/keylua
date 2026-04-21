@@ -13,6 +13,7 @@
 #include "virtual_device.h"
 #include "event_pipeline.h"
 #include "lua_runtime.h"
+#include "event_codes_map.h"
 
 #define INIT_LUA "init.lua"
 #define USER_CONFIG_REL_TO_HOME ".config/keylua/" INIT_LUA
@@ -74,18 +75,36 @@ int main(int argc, char* argv[])
     }
     std::cout << "Initialized LuaRuntime" << std::endl;
 
-    for (const auto& d : lua.devices())
-    {
-        std::cout << "Device: \n  name: " << d.name
-            << "\n  vid: " << std::hex << d.vid << std::dec
-            << "\n  pid: " << std::hex << d.pid << std::dec << std::endl;
-        std::cout << "  Mappings: \n";
-        for (const auto& m : d.mappings)
-        {
-            std::cout << "    trigger: " << m.first << '\n'
-                << "    event: " << m.second << std::endl;
-        }
-    }
+    const auto& devices = lua.devices();
+    const auto& jobs = lua.jobs();
+
+    std::cout << "devices count: " << devices.size() << std::endl;
+    std::cout << "jobs count: " << jobs.size() << std::endl;
+
+    /*   for (size_t i = 0; i < jobs.size(); ++i)
+      {
+          std::cout << "job#" << i << ":\n";
+          for (size_t j = 0; j < jobs[i].atoms.size(); ++j)
+          {
+              std::cout << "  atom#" << j << ":\n";
+              std::cout << "    code: " << std::format("{:#06x}", jobs[i].atoms[j].code) << '\n';
+              std::cout << "    value: " << jobs[i].atoms[j].value << std::endl;
+          }
+      } */
+
+      //return 0;
+      /* for (const auto& d : lua.devices())
+      {
+          std::cout << "Device: \n  name: " << d.name
+              << "\n  vid: " << std::hex << d.vid << std::dec
+              << "\n  pid: " << std::hex << d.pid << std::dec << std::endl;
+          std::cout << "  Mappings: \n";
+          for (const auto& m : d.mappings)
+          {
+              std::cout << "    trigger: " << m.first << '\n'
+                  << "    event: " << m.second << std::endl;
+          }
+      } */
 
     EventPipeline pipeline{lua};
     if (!pipeline)
@@ -108,7 +127,7 @@ int main(int argc, char* argv[])
         if (!d)
         {
             std::cerr << "could not find device: " << std::hex << cfg.vid << ':' << cfg.pid << std::dec << " type=" << d.typestr() << std::endl;
-            continue;
+            return 1;
         }
 
         grabbers.emplace_back(d.devnode());
@@ -116,7 +135,7 @@ int main(int argc, char* argv[])
         if (!g)
         {
             std::cerr << g.errmsg() << std::endl;
-            continue;
+            return 1;
         }
 
         vdevices.emplace_back(g.dev());
@@ -124,19 +143,19 @@ int main(int argc, char* argv[])
         if (!v)
         {
             std::cerr << v.errmsg() << std::endl;
-            continue;
+            return 1;
         }
 
         if (!lua.add_virtual_device(v, id))
         {
             std::cerr << lua.errmsg() << std::endl;
-            continue;
+            return 1;
         }
 
         if (!pipeline.add_device(g, id))
         {
             std::cerr << pipeline.errmsg() << std::endl;
-            continue;
+            return 1;
         }
     }
 

@@ -21,10 +21,7 @@ public:
     ~LuaRuntime();
 
     bool add_virtual_device(VirtualDevice& v, uint32_t ref_id);
-
     bool process_event(uint32_t device_id, const ::input_event& ev);
-
-    //const VirtualDevice* vdev() const { return m_vdev; }
 
     const std::vector<EventJob>& jobs() const { return m_jobs; }
     const std::vector<DeviceConfig>& devices() const { return m_devices; }
@@ -35,17 +32,15 @@ public:
 private:
     int l_device(::lua_State* L);
     int l_dev_map(lua_State* L);
-    //int l_map(::lua_State* L);
     int l_keydown(::lua_State* L);
     int l_keyup(::lua_State* L);
     int l_key(::lua_State* L);
     int impl_key(::lua_State* L, const char* fname, int32_t key_action);
-    //int l_suppress(::lua_State* L);
 
     bool do_emit_key(const char* key, int value);
     int emit_key(::lua_State* L, const char* fname, int value);
 
-    uint32_t new_job(std::vector<InputAtom>&& atoms);
+    uint32_t new_job(EventJob&& atoms);
     void push_job_ref(::lua_State* L, uint32_t id);
 
     void init_lua();

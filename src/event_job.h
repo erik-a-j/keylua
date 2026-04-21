@@ -2,10 +2,8 @@
 #define EVENT_JOB_H
 
 #include <cstdint>
-#include <array>
 #include <vector>
-#include <unordered_map>
-#include <optional>
+#include <variant>
 
 struct InputAtom {
     uint16_t type;
@@ -13,14 +11,16 @@ struct InputAtom {
     int32_t value;
 };
 
-struct EventJob {
+struct AtomSequenceJob {
     std::vector<InputAtom> atoms;
 };
+struct LuaFunctionJob {
+    int lua_ref;
+};
+using EventJob = std::variant<AtomSequenceJob, LuaFunctionJob>;
 
 struct EventJobRef {
     uint32_t id;
 };
-
-using EventJobMap = std::unordered_map<uint16_t, std::array<std::optional<uint32_t>, 3>>;
 
 #endif /* #ifndef EVENT_JOB_H */

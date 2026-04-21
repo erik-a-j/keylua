@@ -6,9 +6,9 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <string>
+#include <type_traits>
 
 #define KEYLUA_DEVICE_MT "keylua.Device"
-#define KEYLUA_MAPPING_MT "keylua.Mapping"
 #define KEYLUA_EVENTJOB_MT "keylua.EventJob"
 
 typedef int (LuaRuntime::* lfunc)(lua_State* L);
@@ -64,15 +64,22 @@ LuaRuntime::LuaRuntime(const char* config_path)
         lua_pop(m_lua_state, 1);
     }
 }
-
-
-
 LuaRuntime::~LuaRuntime()
 {
-    if (m_lua_state != nullptr)
+    if (m_lua_state == nullptr) return;
+
+    for (const auto& job : m_jobs)
     {
-        ::lua_close(m_lua_state);
+        std::visit([&](const auto& j) {
+            using T = std::decay_t<decltype(j)>;
+            if constexpr (std::is_same_v<T, LuaFunctionJob>)
+            {
+                ::luaL_unref(m_lua_state, LUA_REGISTRYINDEX, j.lua_ref);
+            }
+        }, job);
     }
+
+    ::lua_close(m_lua_state);
 }
 
 bool LuaRuntime::add_virtual_device(VirtualDevice& v, uint32_t ref_id)
@@ -86,12 +93,11 @@ bool LuaRuntime::add_virtual_device(VirtualDevice& v, uint32_t ref_id)
     return true;
 }
 
-uint32_t LuaRuntime::new_job(std::vector<InputAtom>&& atoms)
+uint32_t LuaRuntime::new_job(EventJob&& job)
 {
-    m_jobs.push_back({std::move(atoms)});
+    m_jobs.push_back(std::move(job));
     return static_cast<uint32_t>(m_jobs.size() - 1);
 }
-
 void LuaRuntime::push_job_ref(::lua_State* L, uint32_t id)
 {
     auto* ref = static_cast<EventJobRef*>(::lua_newuserdatauv(L, sizeof(EventJobRef), 0));
@@ -113,19 +119,35 @@ bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
         auto it = dev_cfg.mappings.find(ev.code);
         if (it != dev_cfg.mappings.end())
         {
-            const std::optional<uint32_t>& slot = it->second[ev.value];
+            const std::optional<uint32_t>& slot = it->second[static_cast<size_t>(ev.value)];
             if (slot.has_value())
             {
                 const EventJob& job = m_jobs[slot.value()];
-                for (const InputAtom& atom : job.atoms)
+                return std::visit([&](const auto& j) -> bool
                 {
-                    if (!dev_cfg.vdev->emit(atom.type, atom.code, atom.value)) { return false; }
-                }
-                return dev_cfg.vdev->emit(EV_SYN, SYN_REPORT, 0);
-            }
-            else
-            {
-                ; // slot not set for this value (e.g. no on_repeat) — fall through to passthrough
+                    using T = std::decay_t<decltype(j)>;
+
+                    if constexpr (std::is_same_v<T, AtomSequenceJob>)
+                    {
+                        for (const InputAtom& atom : j.atoms)
+                        {
+                            if (!dev_cfg.vdev->emit(atom.type, atom.code, atom.value)) { return false; }
+                        }
+                        return dev_cfg.vdev->emit(EV_SYN, SYN_REPORT, 0);
+                    }
+                    else if constexpr (std::is_same_v<T, LuaFunctionJob>)
+                    {
+                        ::lua_rawgeti(m_lua_state, LUA_REGISTRYINDEX, j.lua_ref);
+                        ::lua_pushinteger(m_lua_state, ev.value);
+                        if (lua_pcall(m_lua_state, 1, 0, 0) != LUA_OK)
+                        {
+                            m_errbuf = lua_tostring(m_lua_state, -1);
+                            lua_pop(m_lua_state, 1);
+                            return false;
+                        }
+                        return true;
+                    }
+                }, job);
             }
         }
     }
@@ -207,27 +229,30 @@ int LuaRuntime::l_dev_map(lua_State* L)
         const char* name = lua_tostring(L, 3);
         kw = EventCodesMap::lookup(name);
         if (!kw) { return ::luaL_error(L, "map: unknown key '%s'", name); }
-        press_job_id = new_job({{ EV_KEY, static_cast<uint16_t>(kw->code), 1 }});
-        release_job_id = new_job({{ EV_KEY, static_cast<uint16_t>(kw->code), 0 }});
+
+        press_job_id = new_job(AtomSequenceJob{{
+            {EV_KEY, static_cast<uint16_t>(kw->code), 1}
+        }});
+        release_job_id = new_job(AtomSequenceJob{{
+            { EV_KEY, static_cast<uint16_t>(kw->code), 0 }
+        }});
     }
-    else if (arg_type == LUA_TUSERDATA)
+    else if (arg_type == LUA_TFUNCTION)
     {
-        auto* jref = static_cast<EventJobRef*>(::luaL_checkudata(L, 3, KEYLUA_EVENTJOB_MT));
-        press_job_id = jref->id;
+        lua_pushvalue(L, 3);
+        int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        press_job_id = new_job(LuaFunctionJob{ref});
     }
     else if (arg_type == LUA_TTABLE)
     {
-        std::vector<InputAtom> atoms;
 
-        auto resolve_field = [&](const char* field, int32_t value) -> bool
+        auto resolve_field = [&](const char* field, int32_t value) -> std::optional<uint32_t>
         {
             ::lua_getfield(L, 3, field);
             int ftype = ::lua_type(L, -1);
+            std::optional<uint32_t> result = std::nullopt;
 
-            if (ftype == LUA_TNIL)
-            {
-                ; // field omitted, that's fine
-            }
+            if (ftype == LUA_TNIL) { ; /* field omitted */ }
             else if (ftype == LUA_TSTRING)
             {
                 const char* name = lua_tostring(L, -1);
@@ -236,43 +261,53 @@ int LuaRuntime::l_dev_map(lua_State* L)
                 {
                     ::lua_pop(L, 1);
                     ::luaL_error(L, "map: unknown key '%s' in %s", name, field);
-                    return false;
+                    return std::nullopt;
                 }
-                atoms.push_back({EV_KEY, static_cast<uint16_t>(kw->code), value});
+                result = new_job(AtomSequenceJob{{
+                    {EV_KEY, static_cast<uint16_t>(kw->code), value}
+                }});
+            }
+            else if (ftype == LUA_TFUNCTION)
+            {
+                lua_pushvalue(L, -1);
+                int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+                result = new_job(LuaFunctionJob{ref});
             }
             else if (ftype == LUA_TUSERDATA)
             {
                 auto* jref = static_cast<EventJobRef*>(::luaL_checkudata(L, -1, KEYLUA_EVENTJOB_MT));
-                const auto& job_atoms = m_jobs[jref->id].atoms;
-                atoms.insert(atoms.end(), job_atoms.begin(), job_atoms.end());
+                result = jref->id;
             }
             else
             {
                 ::lua_pop(L, 1);
-                ::luaL_error(L, "map: '%s' must be a string or EventJob", field);
-                return false;
+                ::luaL_error(L, "map: '%s' must be a string, function or EventJob", field);
+                return std::nullopt;
             }
 
             ::lua_pop(L, 1);
-            return true;
+            return result;
         };
 
-        if (!resolve_field("on_press", 1)) return 0;
-        if (!resolve_field("on_release", 0)) return 0;
+        press_job_id = resolve_field("on_press", 1);
+        release_job_id = resolve_field("on_release", 0);
 
-        if (atoms.empty())
+        if (!press_job_id.has_value() && !release_job_id.has_value())
         {
             return ::luaL_error(L, "map: table must have at least one of 'on_press' or 'on_release'");
         }
-
-        job_id = new_job(std::move(atoms));
+    }
+    else if (arg_type == LUA_TUSERDATA)
+    {
+        return ::luaL_error(L, "map: pass an EventJob via { on_press = job } or { on_release = job }");
     }
     else
     {
-        return ::luaL_error(L, "map: second argument must be a string, EventJob, or table");
+        return ::luaL_error(L, "map: second argument must be a string or table");
     }
 
-    dev.mappings[trigger_code] = job_id;
+    if (press_job_id.has_value()) { dev.mappings[trigger_code][1] = press_job_id; }
+    if (release_job_id.has_value()) { dev.mappings[trigger_code][0] = release_job_id; }
     return 0;
 }
 
@@ -293,7 +328,7 @@ int LuaRuntime::impl_key(::lua_State* L, const char* fname, int32_t key_action)
     if (key_action & KEYACTION_PRESS) { atoms.push_back({EV_KEY, static_cast<uint16_t>(kw->code), 1}); }
     if (key_action & KEYACTION_RELEASE) { atoms.push_back({EV_KEY, static_cast<uint16_t>(kw->code), 0}); }
 
-    uint32_t id = new_job(std::move(atoms));
+    uint32_t id = new_job(AtomSequenceJob{std::move(atoms)});
     push_job_ref(L, id);
     return 1;
 }
