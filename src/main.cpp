@@ -26,18 +26,32 @@ static void signal_handler(int)
     g_stop.store(true);
 }
 
-/* void print_device_info(const Device& d)
- {
-     std::cout << "- Product:Vendor: " << d.pid() << ':' << d.vid() << '\n'
-         << "  - Event Nodes:\n";
-     for (const auto& node : d.input_interfaces())
-     {
-         std::cout << "    - Name: " << node.name() << '\n'
-             << "      Path: " << node.devpath() << '\n'
-             << "      Node: " << node.devnode() << '\n'
-             << "      Type: " << node.typestr() << '\n';
-     }
- } */
+struct usr_data_t {
+    const std::vector<DeviceConfig>& devices;
+    const std::vector<EventJob>& jobs;
+    const std::unordered_map<uint16_t, const char*>& rmap;
+};
+
+void event_callback(uint32_t device_id, const input_event* ev, void* usr_data)
+{
+    if (ev->type == EV_SYN && ev->code == SYN_REPORT) return;
+
+    usr_data_t* x = reinterpret_cast<usr_data_t*>(usr_data);
+    const auto& d = x->devices[device_id];
+
+    const char* action = nullptr;
+    switch (ev->value)
+    {
+    case 0: action = "RELEASE"; break;
+    case 1: action = "PRESS"; break;
+    case 2: action = "REPEAT"; break;
+    default: break;
+    }
+
+    std::cout << d.name << ": action=";
+    if (action) std::cout << action << std::endl;
+    else std::cout << "value(" << ev->value << ")" << std::endl;
+}
 
 int main(int argc, char* argv[])
 {
@@ -75,11 +89,11 @@ int main(int argc, char* argv[])
     }
     std::cout << "Initialized LuaRuntime" << std::endl;
 
-    const auto& devices = lua.devices();
-    const auto& jobs = lua.jobs();
+    auto rmap = EventCodesMap::rlookup_code();
+    usr_data_t usr_data{lua.devices(), lua.jobs(), rmap};
 
-    std::cout << "devices count: " << devices.size() << std::endl;
-    std::cout << "jobs count: " << jobs.size() << std::endl;
+    std::cout << "devices count: " << usr_data.devices.size() << std::endl;
+    std::cout << "jobs count: " << usr_data.jobs.size() << std::endl;
 
     /*   for (size_t i = 0; i < jobs.size(); ++i)
       {
@@ -106,7 +120,7 @@ int main(int argc, char* argv[])
           }
       } */
 
-    EventPipeline pipeline{lua};
+    EventPipeline pipeline{lua, event_callback, &usr_data};
     if (!pipeline)
     {
         std::cerr << pipeline.errmsg() << std::endl;

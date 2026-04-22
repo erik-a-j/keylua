@@ -9,6 +9,8 @@
 #include <string_view>
 #include <atomic>
 
+typedef void (*event_callback_t)(uint32_t device_id, const input_event* ev, void* usr_data);
+
 struct Watch {
     DeviceGrabber* grabber;
     uint32_t device_id;
@@ -16,7 +18,7 @@ struct Watch {
 
 class EventPipeline {
 public:
-    explicit EventPipeline(LuaRuntime& lua);
+    explicit EventPipeline(LuaRuntime& lua, event_callback_t evcb = nullptr, void* usr_data = nullptr);
 
     EventPipeline(EventPipeline&& other) = delete;
     EventPipeline& operator=(EventPipeline&&) = delete;
@@ -37,6 +39,8 @@ private:
     bool drain(Watch& w);
 
     LuaRuntime& m_lua;
+    event_callback_t m_evcb;
+    void* m_usr_data;
     int m_epfd{-1};
     std::vector<std::unique_ptr<Watch>> m_watches;
     std::string m_errbuf;

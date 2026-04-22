@@ -215,19 +215,21 @@ int LuaRuntime::l_dev_map(lua_State* L)
     DeviceConfig& dev = m_devices[ref->id];
 
     const char* trigger = luaL_checkstring(L, 2);
-    const keyword* kw = EventCodesMap::lookup(trigger);
+    const keyword* kw = EventCodesMap::lookup(trigger, std::strlen(trigger));
     if (!kw) { return ::luaL_error(L, "map: unknown key '%s'", trigger); }
     uint16_t trigger_code = static_cast<uint16_t>(kw->code);
 
     std::optional<uint32_t> press_job_id = std::nullopt;
     std::optional<uint32_t> release_job_id = std::nullopt;
+    std::optional<uint32_t> repeat_job_id = std::nullopt;
+
     int arg_type = ::lua_type(L, 3);
 
     if (arg_type == LUA_TSTRING)
     {
         // shorthand
         const char* name = lua_tostring(L, 3);
-        kw = EventCodesMap::lookup(name);
+        kw = EventCodesMap::lookup(name, std::strlen(name));
         if (!kw) { return ::luaL_error(L, "map: unknown key '%s'", name); }
 
         press_job_id = new_job(AtomSequenceJob{{
@@ -236,12 +238,18 @@ int LuaRuntime::l_dev_map(lua_State* L)
         release_job_id = new_job(AtomSequenceJob{{
             { EV_KEY, static_cast<uint16_t>(kw->code), 0 }
         }});
+        repeat_job_id = new_job(AtomSequenceJob{{
+            { EV_KEY, static_cast<uint16_t>(kw->code), 2 }
+        }});
     }
     else if (arg_type == LUA_TFUNCTION)
     {
         lua_pushvalue(L, 3);
         int ref = luaL_ref(L, LUA_REGISTRYINDEX);
-        press_job_id = new_job(LuaFunctionJob{ref});
+        uint32_t id = new_job(LuaFunctionJob{ref});
+        press_job_id = id;
+        release_job_id = id;
+        repeat_job_id = id;
     }
     else if (arg_type == LUA_TTABLE)
     {
@@ -256,7 +264,7 @@ int LuaRuntime::l_dev_map(lua_State* L)
             else if (ftype == LUA_TSTRING)
             {
                 const char* name = lua_tostring(L, -1);
-                const keyword* kw = EventCodesMap::lookup(name);
+                const keyword* kw = EventCodesMap::lookup(name, std::strlen(name));
                 if (!kw)
                 {
                     ::lua_pop(L, 1);
@@ -321,7 +329,7 @@ int LuaRuntime::impl_key(::lua_State* L, const char* fname, int32_t key_action)
 {
     const char* name = luaL_checkstring(L, 1);
 
-    const keyword* kw = EventCodesMap::lookup(name);
+    const keyword* kw = EventCodesMap::lookup(name, std::strlen(name));
     if (!kw) { return luaL_error(L, "%s: unknown key '%s'", fname, name); }
 
     std::vector<InputAtom> atoms;

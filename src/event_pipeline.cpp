@@ -8,8 +8,8 @@
 #include <cerrno>
 #include <cstring>
 
-EventPipeline::EventPipeline(LuaRuntime& lua)
-    : m_lua{lua}
+EventPipeline::EventPipeline(LuaRuntime& lua, event_callback_t evcb, void* usr_data)
+    : m_lua{lua}, m_evcb{evcb}, m_usr_data{usr_data}
 {
     m_epfd = ::epoll_create1(EPOLL_CLOEXEC);
     if (m_epfd == -1)
@@ -90,11 +90,13 @@ bool EventPipeline::drain(Watch& w)
             while ((rc = ::libevdev_next_event(w.grabber->dev(),
                 LIBEVDEV_READ_FLAG_SYNC, &ie)) >= 0)
             {
+                if (m_evcb) m_evcb(w.device_id, &ie, m_usr_data);
                 if (!m_lua.process_event(w.device_id, ie)) return false;
             }
         }
         else
         {
+            if (m_evcb) m_evcb(w.device_id, &ie, m_usr_data);
             if (!m_lua.process_event(w.device_id, ie)) return false;
         }
     }
