@@ -34,23 +34,99 @@ struct usr_data_t {
 
 void event_callback(uint32_t device_id, const input_event* ev, void* usr_data)
 {
-    if (ev->type == EV_SYN && ev->code == SYN_REPORT) return;
+    if (ev->type != EV_KEY) return;
 
     usr_data_t* x = reinterpret_cast<usr_data_t*>(usr_data);
     const auto& d = x->devices[device_id];
 
-    const char* action = nullptr;
-    switch (ev->value)
+    auto value_to_action = [](int32_t v) -> const char*
     {
-    case 0: action = "RELEASE"; break;
-    case 1: action = "PRESS"; break;
-    case 2: action = "REPEAT"; break;
-    default: break;
+        switch (v)
+        {
+        case 0: return "RELEASE";
+        case 1: return "PRESS";
+        case 2: return "REPEAT";
+        default: return nullptr;
+        }
+    };
+
+    const char* action = value_to_action(ev->value);
+    const char* key = nullptr;
+    {
+        auto it = x->rmap.find(ev->code);
+        if (it != x->rmap.end())
+        {
+            key = it->second;
+        }
     }
 
-    std::cout << d.name << ": action=";
-    if (action) std::cout << action << std::endl;
-    else std::cout << "value(" << ev->value << ")" << std::endl;
+    std::string map = "passthrough";
+    {
+        auto it = d.mappings.find(ev->code);
+        if (it != d.mappings.end())
+        {
+            const std::optional<uint32_t>& slot = it->second[static_cast<size_t>(ev->value)];
+            if (slot.has_value())
+            {
+                const EventJob& job = x->jobs[slot.value()];
+                std::visit([&](const auto& j)
+                {
+                    using T = std::decay_t<decltype(j)>;
+
+                    if constexpr (std::is_same_v<T, AtomSequenceJob>)
+                    {
+                        map = "AtomSequenceJob{";
+                        for (const auto& atom : j.atoms)
+                        {
+                            map += "\n  ";
+                            const char* seqaction = value_to_action(atom.value);
+                            const char* seqkey = nullptr;
+                            auto iit = x->rmap.find(atom.code);
+                            if (iit != x->rmap.end())
+                            {
+                                seqkey = iit->second;
+                            }
+                            if (seqaction)
+                            {
+                                map += seqaction;
+                            }
+                            else
+                            {
+                                map += "value(";
+                                map += std::to_string(atom.value) + ")";
+                            }
+                            map += ": ";
+                            if (seqkey)
+                            {
+                                map += seqkey;
+                            }
+                            else
+                            {
+                                map += "value(";
+                                map += std::to_string(atom.code) + ")";
+                            }
+                            map += ",";
+                        }
+                        map += "\n}";
+                    }
+                    else if constexpr (std::is_same_v<T, LuaFunctionJob>)
+                    {
+                        map = "LuaFunctionJob";
+                    }
+                }, job);
+            }
+        }
+
+        std::cout << d.name << ": action=";
+        if (action) std::cout << action;
+        else std::cout << "value(" << ev->value << ")";
+
+        std::cout << ", key=";
+        if (key) std::cout << key;
+        else std::cout << "value(" << ev->code << ")";
+
+        std::cout << ", map=" << map << std::endl;
+    }
 }
 
 int main(int argc, char* argv[])
