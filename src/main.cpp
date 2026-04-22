@@ -76,36 +76,41 @@ void event_callback(uint32_t device_id, const input_event* ev, void* usr_data)
                     if constexpr (std::is_same_v<T, AtomSequenceJob>)
                     {
                         map = "AtomSequenceJob{";
-                        for (const auto& atom : j.atoms)
+                        const AtomSequenceJob* pj = &j;
+                        while (pj)
                         {
-                            map += "\n  ";
-                            const char* seqaction = value_to_action(atom.value);
-                            const char* seqkey = nullptr;
-                            auto iit = x->rmap.find(atom.code);
-                            if (iit != x->rmap.end())
+                            for (const auto& atom : pj->atoms)
                             {
-                                seqkey = iit->second;
+                                map += "\n  ";
+                                const char* seqaction = value_to_action(atom.value);
+                                const char* seqkey = nullptr;
+                                auto iit = x->rmap.find(atom.code);
+                                if (iit != x->rmap.end())
+                                {
+                                    seqkey = iit->second;
+                                }
+                                if (seqaction)
+                                {
+                                    map += seqaction;
+                                }
+                                else
+                                {
+                                    map += "value(";
+                                    map += std::to_string(atom.value) + ")";
+                                }
+                                map += ": ";
+                                if (seqkey)
+                                {
+                                    map += seqkey;
+                                }
+                                else
+                                {
+                                    map += "value(";
+                                    map += std::to_string(atom.code) + ")";
+                                }
+                                map += ",";
                             }
-                            if (seqaction)
-                            {
-                                map += seqaction;
-                            }
-                            else
-                            {
-                                map += "value(";
-                                map += std::to_string(atom.value) + ")";
-                            }
-                            map += ": ";
-                            if (seqkey)
-                            {
-                                map += seqkey;
-                            }
-                            else
-                            {
-                                map += "value(";
-                                map += std::to_string(atom.code) + ")";
-                            }
-                            map += ",";
+                            pj = pj->next;
                         }
                         map += "\n}";
                     }

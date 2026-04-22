@@ -35,7 +35,10 @@ private:
     int l_keydown(::lua_State* L);
     int l_keyup(::lua_State* L);
     int l_key(::lua_State* L);
+    int l_job_concat(lua_State* L);
+
     int impl_key(::lua_State* L, const char* fname, int32_t key_action);
+
 
     bool do_emit_key(const char* key, int value);
     int emit_key(::lua_State* L, const char* fname, int value);

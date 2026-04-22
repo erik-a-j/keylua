@@ -40,6 +40,8 @@ void LuaRuntime::init_lua()
     lua_pop(L, 1);
 
     ::luaL_newmetatable(L, KEYLUA_EVENTJOB_MT);
+    lua_pushcfunction(L, &dispatch<&LuaRuntime::l_job_concat>);
+    lua_setfield(L, -2, "__concat");
     lua_pop(L, 1);
 
     lua_register(L, "device", &dispatch<&LuaRuntime::l_device>);
@@ -129,9 +131,14 @@ bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
 
                     if constexpr (std::is_same_v<T, AtomSequenceJob>)
                     {
-                        for (const InputAtom& atom : j.atoms)
+                        const AtomSequenceJob* pj = &j;
+                        while (pj)
                         {
-                            if (!dev_cfg.vdev->emit(atom.type, atom.code, atom.value)) { return false; }
+                            for (const InputAtom& atom : pj->atoms)
+                            {
+                                if (!dev_cfg.vdev->emit(atom.type, atom.code, atom.value)) { return false; }
+                            }
+                            pj = pj->next;
                         }
                         return dev_cfg.vdev->emit(EV_SYN, SYN_REPORT, 0);
                     }
@@ -338,5 +345,26 @@ int LuaRuntime::impl_key(::lua_State* L, const char* fname, int32_t key_action)
 
     uint32_t id = new_job(AtomSequenceJob{std::move(atoms)});
     push_job_ref(L, id);
+    return 1;
+}
+
+int LuaRuntime::l_job_concat(lua_State* L)
+{
+    auto* a = static_cast<EventJobRef*>(luaL_checkudata(L, 1, KEYLUA_EVENTJOB_MT));
+    auto* b = static_cast<EventJobRef*>(luaL_checkudata(L, 2, KEYLUA_EVENTJOB_MT));
+
+    EventJob& ja = m_jobs[a->id];
+    EventJob& jb = m_jobs[b->id];
+
+    if (!std::holds_alternative<AtomSequenceJob>(ja) || !std::holds_alternative<AtomSequenceJob>(jb))
+    {
+        return luaL_error(L, "concat: cannot concatenate function jobs");
+    }
+
+    auto& sa = std::get<AtomSequenceJob>(ja);
+    auto& sb = std::get<AtomSequenceJob>(jb);
+
+    sa.next = &sb;
+    push_job_ref(L, a->id);
     return 1;
 }

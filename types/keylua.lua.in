@@ -12,6 +12,7 @@
 ---Opaque handle to a sequence of input events. Produced by key(), keydown(),
 ---keyup(), and consumed by map().
 ---@class keylua.EventJob
+---@operator concat(keylua.EventJob): keylua.EventJob
 
 ---@class keylua.TriggerConfig
 ---@field on_press? keylua.EventJob|function
