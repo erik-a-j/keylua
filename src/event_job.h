@@ -13,7 +13,6 @@ struct InputAtom {
 
 struct AtomSequenceJob {
     std::vector<InputAtom> atoms;
-    AtomSequenceJob* next{nullptr};
 };
 struct LuaFunctionJob {
     int lua_ref;

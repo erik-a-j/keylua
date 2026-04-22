@@ -131,14 +131,9 @@ bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
 
                     if constexpr (std::is_same_v<T, AtomSequenceJob>)
                     {
-                        const AtomSequenceJob* pj = &j;
-                        while (pj)
+                        for (const InputAtom& atom : j.atoms)
                         {
-                            for (const InputAtom& atom : pj->atoms)
-                            {
-                                if (!dev_cfg.vdev->emit(atom.type, atom.code, atom.value)) { return false; }
-                            }
-                            pj = pj->next;
+                            if (!dev_cfg.vdev->emit(atom.type, atom.code, atom.value)) { return false; }
                         }
                         return dev_cfg.vdev->emit(EV_SYN, SYN_REPORT, 0);
                     }
@@ -278,9 +273,19 @@ int LuaRuntime::l_dev_map(lua_State* L)
                     ::luaL_error(L, "map: unknown key '%s' in %s", name, field);
                     return std::nullopt;
                 }
-                result = new_job(AtomSequenceJob{{
-                    {EV_KEY, static_cast<uint16_t>(kw->code), value}
-                }});
+                if (value == 2)
+                {
+                    result = new_job(AtomSequenceJob{{
+                        {EV_KEY, static_cast<uint16_t>(kw->code), 1},
+                        {EV_KEY, static_cast<uint16_t>(kw->code), 0}
+                    }});
+                }
+                else
+                {
+                    result = new_job(AtomSequenceJob{{
+                        {EV_KEY, static_cast<uint16_t>(kw->code), value}
+                    }});
+                }
             }
             else if (ftype == LUA_TFUNCTION)
             {
@@ -306,23 +311,25 @@ int LuaRuntime::l_dev_map(lua_State* L)
 
         press_job_id = resolve_field("on_press", 1);
         release_job_id = resolve_field("on_release", 0);
+        repeat_job_id = resolve_field("on_repeat", 2);
 
-        if (!press_job_id.has_value() && !release_job_id.has_value())
+        if (!press_job_id.has_value() && !release_job_id.has_value() && !repeat_job_id.has_value())
         {
-            return ::luaL_error(L, "map: table must have at least one of 'on_press' or 'on_release'");
+            return ::luaL_error(L, "map: table must have at least one of 'on_press', 'on_release' or 'on_repeat'");
         }
     }
     else if (arg_type == LUA_TUSERDATA)
     {
-        return ::luaL_error(L, "map: pass an EventJob via { on_press = job } or { on_release = job }");
+        return ::luaL_error(L, "map: pass an EventJob via keylua.TriggerConfig");
     }
     else
     {
         return ::luaL_error(L, "map: second argument must be a string or table");
     }
 
-    if (press_job_id.has_value()) { dev.mappings[trigger_code][1] = press_job_id; }
     if (release_job_id.has_value()) { dev.mappings[trigger_code][0] = release_job_id; }
+    if (press_job_id.has_value()) { dev.mappings[trigger_code][1] = press_job_id; }
+    if (repeat_job_id.has_value()) { dev.mappings[trigger_code][2] = repeat_job_id; }
     return 0;
 }
 
@@ -353,18 +360,23 @@ int LuaRuntime::l_job_concat(lua_State* L)
     auto* a = static_cast<EventJobRef*>(luaL_checkudata(L, 1, KEYLUA_EVENTJOB_MT));
     auto* b = static_cast<EventJobRef*>(luaL_checkudata(L, 2, KEYLUA_EVENTJOB_MT));
 
-    EventJob& ja = m_jobs[a->id];
-    EventJob& jb = m_jobs[b->id];
+    const EventJob& ja = m_jobs[a->id];
+    const EventJob& jb = m_jobs[b->id];
 
     if (!std::holds_alternative<AtomSequenceJob>(ja) || !std::holds_alternative<AtomSequenceJob>(jb))
     {
         return luaL_error(L, "concat: cannot concatenate function jobs");
     }
 
-    auto& sa = std::get<AtomSequenceJob>(ja);
-    auto& sb = std::get<AtomSequenceJob>(jb);
+    const auto& sa = std::get<AtomSequenceJob>(ja);
+    const auto& sb = std::get<AtomSequenceJob>(jb);
 
-    sa.next = &sb;
-    push_job_ref(L, a->id);
+    AtomSequenceJob merged;
+    merged.atoms.reserve(sa.atoms.size() + sb.atoms.size());
+    merged.atoms.insert(merged.atoms.end(), sa.atoms.begin(), sa.atoms.end());
+    merged.atoms.insert(merged.atoms.end(), sb.atoms.begin(), sb.atoms.end());
+
+    uint32_t id = new_job(std::move(merged));
+    push_job_ref(L, id);
     return 1;
 }

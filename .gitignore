@@ -14,4 +14,3 @@ test*.cpp
 input_evcodes_left.h
 tools/**
 !tools/generate.py
-init.lua
