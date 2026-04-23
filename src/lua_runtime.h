@@ -45,10 +45,12 @@ private:
 
     uint32_t new_job(EventJob&& atoms);
     void push_job_ref(::lua_State* L, uint32_t id);
+    uint32_t noop_job();
 
     void init_lua();
 
     ::lua_State* m_lua_state{nullptr};
+    std::optional<uint32_t> m_noop_job_id;
     std::vector<EventJob> m_jobs;
     std::vector<DeviceConfig> m_devices;
     std::string m_errbuf;

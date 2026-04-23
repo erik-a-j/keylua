@@ -106,6 +106,14 @@ void LuaRuntime::push_job_ref(::lua_State* L, uint32_t id)
     ref->id = id;
     ::luaL_setmetatable(L, KEYLUA_EVENTJOB_MT);
 }
+uint32_t LuaRuntime::noop_job()
+{
+    if (!m_noop_job_id.has_value())
+    {
+        m_noop_job_id = new_job(AtomSequenceJob{{}});
+    }
+    return m_noop_job_id.value();
+}
 
 bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
 {
@@ -231,18 +239,21 @@ int LuaRuntime::l_dev_map(lua_State* L)
     {
         // shorthand
         const char* name = lua_tostring(L, 3);
-        kw = EventCodesMap::lookup(name, std::strlen(name));
-        if (!kw) { return ::luaL_error(L, "map: unknown key '%s'", name); }
+        if (name[0] != '\0')
+        {
+            kw = EventCodesMap::lookup(name, std::strlen(name));
+            if (!kw) { return ::luaL_error(L, "map: unknown key '%s'", name); }
 
-        press_job_id = new_job(AtomSequenceJob{{
-            {EV_KEY, static_cast<uint16_t>(kw->code), 1}
-        }});
-        release_job_id = new_job(AtomSequenceJob{{
-            { EV_KEY, static_cast<uint16_t>(kw->code), 0 }
-        }});
-        repeat_job_id = new_job(AtomSequenceJob{{
-            { EV_KEY, static_cast<uint16_t>(kw->code), 2 }
-        }});
+            press_job_id = new_job(AtomSequenceJob{{
+                {EV_KEY, static_cast<uint16_t>(kw->code), 1}
+            }});
+            release_job_id = new_job(AtomSequenceJob{{
+                { EV_KEY, static_cast<uint16_t>(kw->code), 0 }
+            }});
+            repeat_job_id = new_job(AtomSequenceJob{{
+                { EV_KEY, static_cast<uint16_t>(kw->code), 2 }
+            }});
+        }
     }
     else if (arg_type == LUA_TFUNCTION)
     {
@@ -266,6 +277,12 @@ int LuaRuntime::l_dev_map(lua_State* L)
             else if (ftype == LUA_TSTRING)
             {
                 const char* name = lua_tostring(L, -1);
+                if (name[0] == '\0')
+                {
+                    ::lua_pop(L, 1);
+                    return std::nullopt;
+                }
+
                 const keyword* kw = EventCodesMap::lookup(name, std::strlen(name));
                 if (!kw)
                 {
@@ -301,7 +318,7 @@ int LuaRuntime::l_dev_map(lua_State* L)
             else
             {
                 ::lua_pop(L, 1);
-                ::luaL_error(L, "map: '%s' must be a string, function or EventJob", field);
+                ::luaL_error(L, "map: '%s' must be [keylua.KeyName|keylua.EventJob|function]", field);
                 return std::nullopt;
             }
 
@@ -324,12 +341,15 @@ int LuaRuntime::l_dev_map(lua_State* L)
     }
     else
     {
-        return ::luaL_error(L, "map: second argument must be a string or table");
+        return ::luaL_error(L, "map: second argument must be [keylua.KeyName|keylua.TriggerConfig|function]");
     }
 
-    if (release_job_id.has_value()) { dev.mappings[trigger_code][0] = release_job_id; }
-    if (press_job_id.has_value()) { dev.mappings[trigger_code][1] = press_job_id; }
-    if (repeat_job_id.has_value()) { dev.mappings[trigger_code][2] = repeat_job_id; }
+    if (!release_job_id.has_value()) { release_job_id = noop_job(); }
+    if (!press_job_id.has_value()) { press_job_id = noop_job(); }
+    if (!repeat_job_id.has_value()) { repeat_job_id = noop_job(); }
+    dev.mappings[trigger_code][0] = release_job_id;
+    dev.mappings[trigger_code][1] = press_job_id;
+    dev.mappings[trigger_code][2] = repeat_job_id;
     return 0;
 }
 
