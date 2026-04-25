@@ -10,18 +10,19 @@ FilesInfo = TypedDict("FilesInfo", {
 })
 
 def main(x: FilesInfo) -> None:
-    ns = x["lua-out"].stem
-    codes = [c for c in input_event_codes() if c.startswith("KEY_") or c.startswith("BTN_")]
-
+    x["lua-out"].parent.mkdir(parents=True, exist_ok=True)
+    
     with open(x["lua-in"], mode="rt", encoding="utf-8") as f:
         lines = [l.strip('\n') for l in f]
-    
-    m = re.compile(rf"---@alias {ns}.KeyName")
+
+    codes = [c for c in input_event_codes() if c.startswith("KEY_") or c.startswith("BTN_")]
+    ns = x["lua-out"].stem
+    insert_after_re = re.compile(rf"---@alias {ns}.KeyName")
 
     with open(x["lua-out"], mode="wt", encoding="utf-8") as f:
         for l in lines:
             f.write(f"{l}\n")
-            if m.match(l):
+            if insert_after_re.match(l):
                 for k in codes:
                     f.write(f'---| "{k}"\n')
 
