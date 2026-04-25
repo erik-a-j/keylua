@@ -13,7 +13,6 @@
 #include "virtual_device.h"
 #include "event_pipeline.h"
 #include "lua_runtime.h"
-#include "event_codes_map.h"
 
 #define INIT_LUA "init.lua"
 #define USER_CONFIG_REL_TO_HOME ".config/keylua/" INIT_LUA
@@ -29,7 +28,6 @@ static void signal_handler(int)
 struct usr_data_t {
     const std::vector<DeviceConfig>& devices;
     const std::vector<EventJob>& jobs;
-    const std::unordered_map<uint16_t, const char*>& rmap;
 };
 
 void event_callback(uint32_t device_id, const input_event* ev, void* usr_data)
@@ -51,14 +49,7 @@ void event_callback(uint32_t device_id, const input_event* ev, void* usr_data)
     };
 
     const char* action = value_to_action(ev->value);
-    const char* key = nullptr;
-    {
-        auto it = x->rmap.find(ev->code);
-        if (it != x->rmap.end())
-        {
-            key = it->second;
-        }
-    }
+    const char* key = libevdev_event_code_get_name(ev->type, ev->code);
 
     std::string map = "passthrough";
     {
@@ -80,12 +71,8 @@ void event_callback(uint32_t device_id, const input_event* ev, void* usr_data)
                         {
                             map += "\n  ";
                             const char* seqaction = value_to_action(atom.value);
-                            const char* seqkey = nullptr;
-                            auto iit = x->rmap.find(atom.code);
-                            if (iit != x->rmap.end())
-                            {
-                                seqkey = iit->second;
-                            }
+                            const char* seqkey = libevdev_event_code_get_name(atom.type, atom.code);
+
                             if (seqaction)
                             {
                                 map += seqaction;
@@ -165,8 +152,7 @@ int main(int argc, char* argv[])
     }
     std::cout << "Initialized LuaRuntime" << std::endl;
 
-    auto rmap = EventCodesMap::rlookup_code();
-    usr_data_t usr_data{lua.devices(), lua.jobs(), rmap};
+    usr_data_t usr_data{lua.devices(), lua.jobs()};
 
     std::cout << "devices count: " << usr_data.devices.size() << std::endl;
     std::cout << "jobs count: " << usr_data.jobs.size() << std::endl;

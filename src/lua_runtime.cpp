@@ -1,12 +1,13 @@
 
 #include "lua_runtime.h"
 #include "virtual_device.h"
-#include "event_codes_map.h"
 #include <lua.hpp>
 #include <unistd.h>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <type_traits>
+#include <libevdev/libevdev.h>
 
 #define KEYLUA_DEVICE_MT "keylua.Device"
 #define KEYLUA_EVENTJOB_MT "keylua.EventJob"
@@ -225,9 +226,10 @@ int LuaRuntime::l_dev_map(lua_State* L)
     DeviceConfig& dev = m_devices[ref->id];
 
     const char* trigger = luaL_checkstring(L, 2);
-    const keyword* kw = EventCodesMap::lookup(trigger, std::strlen(trigger));
-    if (!kw) { return ::luaL_error(L, "map: unknown key '%s'", trigger); }
-    uint16_t trigger_code = static_cast<uint16_t>(kw->code);
+
+    int evcode = libevdev_event_code_from_name(EV_KEY, trigger);
+    if (evcode == -1) { return ::luaL_error(L, "map: unknown key '%s'", trigger); }
+    uint16_t trigger_code = static_cast<uint16_t>(evcode);
 
     std::optional<uint32_t> press_job_id = std::nullopt;
     std::optional<uint32_t> release_job_id = std::nullopt;
@@ -241,17 +243,17 @@ int LuaRuntime::l_dev_map(lua_State* L)
         const char* name = lua_tostring(L, 3);
         if (name[0] != '\0')
         {
-            kw = EventCodesMap::lookup(name, std::strlen(name));
-            if (!kw) { return ::luaL_error(L, "map: unknown key '%s'", name); }
+            evcode = libevdev_event_code_from_name(EV_KEY, name);
+            if (evcode == -1) { return ::luaL_error(L, "map: unknown key '%s'", name); }
 
             press_job_id = new_job(AtomSequenceJob{{
-                {EV_KEY, static_cast<uint16_t>(kw->code), 1}
+                {EV_KEY, static_cast<uint16_t>(evcode), 1}
             }});
             release_job_id = new_job(AtomSequenceJob{{
-                { EV_KEY, static_cast<uint16_t>(kw->code), 0 }
+                { EV_KEY, static_cast<uint16_t>(evcode), 0 }
             }});
             repeat_job_id = new_job(AtomSequenceJob{{
-                { EV_KEY, static_cast<uint16_t>(kw->code), 2 }
+                { EV_KEY, static_cast<uint16_t>(evcode), 2 }
             }});
         }
     }
@@ -282,9 +284,8 @@ int LuaRuntime::l_dev_map(lua_State* L)
                     ::lua_pop(L, 1);
                     return std::nullopt;
                 }
-
-                const keyword* kw = EventCodesMap::lookup(name, std::strlen(name));
-                if (!kw)
+                int evcode = libevdev_event_code_from_name(EV_KEY, name);
+                if (evcode == -1)
                 {
                     ::lua_pop(L, 1);
                     ::luaL_error(L, "map: unknown key '%s' in %s", name, field);
@@ -293,14 +294,14 @@ int LuaRuntime::l_dev_map(lua_State* L)
                 if (value == 2)
                 {
                     result = new_job(AtomSequenceJob{{
-                        {EV_KEY, static_cast<uint16_t>(kw->code), 1},
-                        {EV_KEY, static_cast<uint16_t>(kw->code), 0}
+                        {EV_KEY, static_cast<uint16_t>(evcode), 1},
+                        {EV_KEY, static_cast<uint16_t>(evcode), 0}
                     }});
                 }
                 else
                 {
                     result = new_job(AtomSequenceJob{{
-                        {EV_KEY, static_cast<uint16_t>(kw->code), value}
+                        {EV_KEY, static_cast<uint16_t>(evcode), value}
                     }});
                 }
             }
@@ -363,12 +364,12 @@ int LuaRuntime::impl_key(::lua_State* L, const char* fname, int32_t key_action)
 {
     const char* name = luaL_checkstring(L, 1);
 
-    const keyword* kw = EventCodesMap::lookup(name, std::strlen(name));
-    if (!kw) { return luaL_error(L, "%s: unknown key '%s'", fname, name); }
+    int evcode = libevdev_event_code_from_name(EV_KEY, name);
+    if (evcode == -1) { return luaL_error(L, "%s: unknown key '%s'", fname, name); }
 
     std::vector<InputAtom> atoms;
-    if (key_action & KEYACTION_PRESS) { atoms.push_back({EV_KEY, static_cast<uint16_t>(kw->code), 1}); }
-    if (key_action & KEYACTION_RELEASE) { atoms.push_back({EV_KEY, static_cast<uint16_t>(kw->code), 0}); }
+    if (key_action & KEYACTION_PRESS) { atoms.push_back({EV_KEY, static_cast<uint16_t>(evcode), 1}); }
+    if (key_action & KEYACTION_RELEASE) { atoms.push_back({EV_KEY, static_cast<uint16_t>(evcode), 0}); }
 
     uint32_t id = new_job(AtomSequenceJob{std::move(atoms)});
     push_job_ref(L, id);

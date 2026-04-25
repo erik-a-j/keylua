@@ -9,4 +9,4 @@ dev:map("KEY_3", {
         print("REPEAT KEY_3")
     end
 })
-dev:map("KEY_4", "")
+dev:map("KEY_4", "KEY_1")
