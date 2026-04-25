@@ -1,5 +1,4 @@
 __pycache__
-.vscode
 build
 tools/*
 !tools/generate_lua.py
