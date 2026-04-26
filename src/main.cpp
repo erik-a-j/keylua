@@ -157,31 +157,6 @@ int main(int argc, char* argv[])
     std::cout << "devices count: " << usr_data.devices.size() << std::endl;
     std::cout << "jobs count: " << usr_data.jobs.size() << std::endl;
 
-    /*   for (size_t i = 0; i < jobs.size(); ++i)
-      {
-          std::cout << "job#" << i << ":\n";
-          for (size_t j = 0; j < jobs[i].atoms.size(); ++j)
-          {
-              std::cout << "  atom#" << j << ":\n";
-              std::cout << "    code: " << std::format("{:#06x}", jobs[i].atoms[j].code) << '\n';
-              std::cout << "    value: " << jobs[i].atoms[j].value << std::endl;
-          }
-      } */
-
-      //return 0;
-      /* for (const auto& d : lua.devices())
-      {
-          std::cout << "Device: \n  name: " << d.name
-              << "\n  vid: " << std::hex << d.vid << std::dec
-              << "\n  pid: " << std::hex << d.pid << std::dec << std::endl;
-          std::cout << "  Mappings: \n";
-          for (const auto& m : d.mappings)
-          {
-              std::cout << "    trigger: " << m.first << '\n'
-                  << "    event: " << m.second << std::endl;
-          }
-      } */
-
     EventPipeline pipeline{lua, event_callback, &usr_data};
     if (!pipeline)
     {
@@ -189,7 +164,6 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    udev* udev = udev_new();
     std::vector<DeviceGrabber> grabbers;
     std::vector<VirtualDevice> vdevices;
     grabbers.reserve(lua.devices().size());
@@ -199,14 +173,18 @@ int main(int argc, char* argv[])
     {
         const auto& cfg = lua.devices()[id];
 
-        Device d{udev, cfg.vid, cfg.pid, cfg.iface};
+        Device d{cfg.vid, cfg.pid};
         if (!d)
         {
-            std::cerr << "could not find device: " << std::hex << cfg.vid << ':' << cfg.pid << std::dec << " type=" << d.typestr() << std::endl;
+            std::cerr << d.errmsg() << std::endl;
+            //std::cerr << "could not find device: " << std::hex << cfg.vid << ':' << cfg.pid << std::dec << std::endl;
             return 1;
         }
+        std::cout << std::hex << cfg.vid << ':' << cfg.pid << std::dec << " keyboard: " << d.keyboard_devname() << std::endl;
+        std::cout << std::hex << cfg.vid << ':' << cfg.pid << std::dec << " mouse: " << d.mouse_devname() << std::endl;
+        continue;
 
-        grabbers.emplace_back(d.devnode());
+        grabbers.emplace_back("d.devnode()");
         auto& g = grabbers.back();
         if (!g)
         {
@@ -235,11 +213,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (!pipeline.run(g_stop))
-    {
-        std::cerr << pipeline.errmsg() << std::endl;
-    }
+    //if (!pipeline.run(g_stop)) { std::cerr << pipeline.errmsg() << std::endl; }
 
-    udev_unref(udev);
     return 0;
 }

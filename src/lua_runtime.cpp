@@ -170,7 +170,7 @@ int LuaRuntime::l_device(::lua_State* L)
 {
     ::luaL_checktype(L, 1, LUA_TTABLE);
 
-    DeviceConfig cfg;
+    DeviceConfig cfg{};
 
     ::lua_getfield(L, 1, "vid");
     if (!::lua_isinteger(L, -1))
@@ -196,11 +196,11 @@ int LuaRuntime::l_device(::lua_State* L)
     const char* iface = lua_tostring(L, -1);
     if (0 == std::strcmp(iface, "keyboard"))
     {
-        cfg.iface = DeviceType::Keyboard;
+        cfg.type |= DEVICETYPE_KEYBOARD;
     }
     else if (0 == std::strcmp(iface, "mouse"))
     {
-        cfg.iface = DeviceType::Mouse;
+        cfg.type |= DEVICETYPE_MOUSE;
     }
     else
     {

@@ -10,7 +10,7 @@ find_package(PkgConfig REQUIRED)
 find_package(Python3 COMPONENTS Interpreter)
 
 pkg_check_modules(EVDEV REQUIRED IMPORTED_TARGET libevdev)
-pkg_check_modules(UDEV REQUIRED IMPORTED_TARGET libudev)
+pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
 pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua)
 
 set(KEYLUA_LUA_IN ${CMAKE_CURRENT_SOURCE_DIR}/types/keylua.lua.in)
@@ -49,7 +49,7 @@ add_custom_target(generate_lua
 add_executable(keylua ${SRC_FILES})
 add_dependencies(keylua generate_lua)
 
-target_link_libraries(keylua PkgConfig::EVDEV PkgConfig::UDEV PkgConfig::LUA)
+target_link_libraries(keylua PkgConfig::EVDEV PkgConfig::SYSTEMD PkgConfig::LUA)
 target_compile_options(keylua PRIVATE 
     -Wall -Wextra -Werror -pedantic-errors -Wsign-conversion
 )
