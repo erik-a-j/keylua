@@ -1,0 +1,22 @@
+P: /devices/pci0000:00/0000:00:08.1/0000:2d:00.3/usb3/3-4/3-4:1.1
+M: 3-4:1.1
+R: 1
+J: +usb:3-4:1.1
+U: usb
+T: usb_interface
+V: usbhid
+E: DEVPATH=/devices/pci0000:00/0000:00:08.1/0000:2d:00.3/usb3/3-4/3-4:1.1
+E: DEVTYPE=usb_interface
+E: DRIVER=usbhid
+E: PRODUCT=1532/15/200
+E: TYPE=0/0/0
+E: INTERFACE=3/0/1
+E: MODALIAS=usb:v1532p0015d0200dc00dsc00dp00ic03isc00ip01in01
+E: SUBSYSTEM=usb
+E: USEC_INITIALIZED=8487864
+E: ID_VENDOR_FROM_DATABASE=Razer USA, Ltd
+E: ID_MODEL_FROM_DATABASE=Naga Mouse
+E: ID_PATH_WITH_USB_REVISION=pci-0000:2d:00.3-usbv2-0:4:1.1
+E: ID_PATH=pci-0000:2d:00.3-usb-0:4:1.1
+E: ID_PATH_TAG=pci-0000_2d_00_3-usb-0_4_1_1
+

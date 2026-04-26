@@ -8,161 +8,119 @@
 #include <cstdint>
 #include <cstring>
 #include <utility>
+#include <vector>
+#include <systemd/sd-device.h>
 
-static inline void vidpidstr(char(&buf)[5], uint16_t num)
-{
-    buf[4] = '\0';
-    for (int i = 3; i >= 0; --i)
-    {
-        buf[i] = num % 0x10;
-        buf[i] += (buf[i] > 0x09) ? 'a' - 0x0a : '0';
-        num /= 0x10;
-    }
-}
+struct DeviceEnumeration {
+    template <typename F>
+    DeviceEnumeration(F init) { init(m_en); }
+    ~DeviceEnumeration() { if (m_en) sd_device_enumerator_unref(m_en); }
 
-static const char* find_iface_syspath(
-    udev* udev,
-    const char* vendor_id,
-    const char* product_id,
-    const char* protocol
-)
-{
-    static char syspath[512];
-    udev_enumerate* enumerate;
-    udev_list_entry* devices;
-    udev_list_entry* entry;
+    struct Iterator {
+        sd_device_enumerator* en_iter;
+        sd_device* dev_iter;
 
-    enumerate = udev_enumerate_new(udev);
-    udev_enumerate_add_match_subsystem(enumerate, "usb");
-    udev_enumerate_add_match_sysattr(enumerate, "bInterfaceClass", "03");
-    udev_enumerate_add_match_sysattr(enumerate, "bInterfaceProtocol", protocol);
-    udev_enumerate_scan_devices(enumerate);
-    devices = udev_enumerate_get_list_entry(enumerate);
+        Iterator(sd_device_enumerator* en_iter_, sd_device* dev_iter_)
+            : en_iter{en_iter_}, dev_iter{dev_iter_}
+        {}
 
-    udev_list_entry_foreach(entry, devices)
-    {
-        const char* spath = udev_list_entry_get_name(entry);
-        udev_device* dev = udev_device_new_from_syspath(udev, spath);
-        if (!dev) continue;
-
-        udev_device* parent = udev_device_get_parent_with_subsystem_devtype(
-            dev, "usb", "usb_device");
-        if (!parent) { udev_device_unref(dev); continue; }
-
-        const char* vid = udev_device_get_property_value(parent, "ID_VENDOR_ID");
-        const char* pid = udev_device_get_property_value(parent, "ID_MODEL_ID");
-
-        if (vid && pid && 0 == std::strcmp(vid, vendor_id) && 0 == std::strcmp(pid, product_id))
+        sd_device* operator*() { return dev_iter; }
+        Iterator& operator++()
         {
-            std::strncpy(syspath, spath, sizeof(syspath) - 1);
-            udev_device_unref(dev);
-            udev_enumerate_unref(enumerate);
-            return syspath;
+            dev_iter = sd_device_enumerator_get_device_next(en_iter);
+            return *this;
         }
+        bool operator!=(const Iterator& o) const { return dev_iter != o.dev_iter; }
+    };
 
-        udev_device_unref(dev);
-    }
+    Iterator begin() { return {m_en, sd_device_enumerator_get_device_first(m_en)}; }
+    Iterator end() { return {m_en, nullptr}; }
 
-    udev_enumerate_unref(enumerate);
-    return NULL;
-}
+private:
+    sd_device_enumerator* m_en{nullptr};
+};
 
-static udev_device* find_event_node(udev* udev, const char* iface_syspath)
+Device::Device(uint16_t vid, uint16_t pid)
+    : m_dev{usb_from_vid_pid(vid, pid)}
 {
-    udev_enumerate* enumerate;
-    udev_list_entry* devices;
-    udev_list_entry* entry;
+    if (!m_dev) { return; }
 
-    enumerate = udev_enumerate_new(udev);
-    udev_enumerate_add_match_subsystem(enumerate, "input");
-    udev_enumerate_scan_devices(enumerate);
-    devices = udev_enumerate_get_list_entry(enumerate);
-
-    udev_list_entry_foreach(entry, devices)
+    DeviceEnumeration iface_en([&](auto& en) {
+        sd_device_enumerator_new(&en);
+        sd_device_enumerator_add_match_subsystem(en, "usb", true);
+        sd_device_enumerator_add_match_property(en, "DEVTYPE", "usb_interface");
+        sd_device_enumerator_add_match_parent(en, m_dev);
+        sd_device_enumerator_add_match_sysattr(en, "bInterfaceClass", "03", true);
+    });
+    for (sd_device* iface : iface_en)
     {
-        const char* syspath = udev_list_entry_get_name(entry);
-        udev_device* dev = udev_device_new_from_syspath(udev, syspath);
-        if (!dev) continue;
-
-        const char* devnode = udev_device_get_devnode(dev);
-        if (!devnode || 0 != std::strncmp(devnode, "/dev/input/event", 16))
+        const char* pcol{nullptr};
+        sd_device_get_sysattr_value(iface, "bInterfaceProtocol", &pcol);
+        if (pcol && pcol[0] == '0' && (pcol[1] == '1' || pcol[1] == '2') && pcol[2] == '\0')
         {
-            udev_device_unref(dev);
-            continue;
-        }
-
-        udev_device* parent = udev_device_get_parent(dev);
-        while (parent)
-        {
-            const char* ppath = udev_device_get_syspath(parent);
-            if (ppath && 0 == std::strcmp(ppath, iface_syspath))
+            DeviceEnumeration input_en([&](auto& en) {
+                sd_device_enumerator_new(&en);
+                sd_device_enumerator_add_match_subsystem(en, "input", true);
+                sd_device_enumerator_add_match_parent(en, iface);
+            });
+            for (sd_device* input : input_en)
             {
-                udev_device* result = udev_device_ref(dev);
-                udev_device_unref(dev);
-                udev_enumerate_unref(enumerate);
-                return result;
+                const char* devname{nullptr};
+                sd_device_get_devname(input, &devname);
+                if (devname && 0 == std::strncmp(devname, "/dev/input/event", 16))
+                {
+                    sd_device_ref(input);
+                    if (pcol[1] == '1') { m_keyboard = input; }
+                    else { m_mouse = input; }
+                    break;
+                }
             }
-            parent = udev_device_get_parent(parent);
         }
-
-        udev_device_unref(dev);
     }
-
-    udev_enumerate_unref(enumerate);
-    return NULL;
 }
 
-Device::Device(::udev* udev, uint16_t vid, uint16_t pid, DeviceType type)
-    : m_vid{vid},
-    m_pid{pid},
-    m_type{type}
+Device::~Device()
 {
-    const char* iface_type;
-    const char* iface;
-    ::udev_device* evnode;
+    if (m_dev) { sd_device_unref(m_dev); }
+    if (m_keyboard) { sd_device_unref(m_keyboard); }
+    if (m_mouse) { sd_device_unref(m_mouse); }
+}
 
-    char svid[5];
-    char spid[5];
-    vidpidstr(svid, vid);
-    vidpidstr(spid, pid);
+std::string Device::keyboard_devname() const
+{
+    const char* devname{nullptr};
+    if (m_keyboard) { sd_device_get_devname(m_keyboard, &devname); }
+    return devname ? std::string{devname} : std::string{};
+}
+std::string Device::mouse_devname() const
+{
+    const char* devname{nullptr};
+    if (m_mouse) { sd_device_get_devname(m_mouse, &devname); }
+    return devname ? std::string{devname} : std::string{};
+}
 
-    if (type == DeviceType::Keyboard) { iface_type = "01"; }
-    else if (type == DeviceType::Mouse) { iface_type = "02"; }
+sd_device* Device::usb_from_vid_pid(uint16_t vid, uint16_t pid)
+{
+    std::string svid = std::format("{:04x}", vid);
+    std::string spid = std::format("{:04x}", pid);
 
-    iface = ::find_iface_syspath(udev, svid, spid, iface_type);
-    if (iface)
+    sd_device_enumerator* en = nullptr;
+    sd_device_enumerator_new(&en);
+
+    sd_device_enumerator_add_match_subsystem(en, "usb", true);
+    sd_device_enumerator_add_match_sysattr(en, "idVendor", svid.c_str(), true);
+    sd_device_enumerator_add_match_sysattr(en, "idProduct", spid.c_str(), true);
+
+    sd_device* dev = sd_device_enumerator_get_device_first(en);
+    if (!dev)
     {
-        evnode = ::find_event_node(udev, iface);
-        if (evnode)
-        {
-            m_udev_dev.reset(::udev_device_ref(evnode));
-        }
+        m_errbuf = std::string("no device: ") + svid + ":" + spid;
     }
-}
+    else
+    {
+        sd_device_ref(dev);
+    }
 
-std::string_view Device::name() const
-{
-    const char* name{nullptr};
-    ::udev_device* parent = this->udev_parent();
-    if (parent) { name = ::udev_device_get_sysattr_value(parent, "name"); }
-    return name ? std::string_view{name} : m_unknown;
-}
-std::string_view Device::devpath() const
-{
-    const char* devpath{nullptr};
-    ::udev_device* dev = m_udev_dev.get();
-    if (dev) { devpath = ::udev_device_get_devpath(dev); }
-    return devpath ? std::string_view{devpath} : m_unknown;
-}
-std::string_view Device::devnode() const
-{
-    const char* devnode{nullptr};
-    ::udev_device* dev = m_udev_dev.get();
-    if (dev) { devnode = ::udev_device_get_devnode(dev); }
-    return devnode ? std::string_view{devnode} : m_unknown;
-}
-udev_device* Device::udev_parent() const
-{
-    ::udev_device* dev = m_udev_dev.get();
-    return dev ? ::udev_device_get_parent_with_subsystem_devtype(dev, "input", nullptr) : nullptr;
+    sd_device_enumerator_unref(en);
+    return dev;                          // caller: sd_device_unref()
 }
