@@ -10,13 +10,19 @@ struct InputAtom {
     uint16_t code;
     int32_t value;
 };
-
-struct AtomSequenceJob {
-    std::vector<InputAtom> atoms;
+struct SleepAtom {
+    uint32_t ms;
 };
+
+using Atom = std::variant<InputAtom, SleepAtom>;
+struct AtomSequenceJob {
+    std::vector<Atom> atoms;
+};
+
 struct LuaFunctionJob {
     int lua_ref;
 };
+
 using EventJob = std::variant<AtomSequenceJob, LuaFunctionJob>;
 
 struct EventJobRef {

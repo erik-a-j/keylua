@@ -7,13 +7,28 @@
 #include <string>
 #include <optional>
 #include <unordered_map>
+#include <queue>
+#include <memory>
+#include <chrono>
 
 class VirtualDevice;
 
 using EventJobMap = std::unordered_map<uint16_t, std::array<std::optional<uint32_t>, 3>>;
+using Clock = std::chrono::steady_clock;
+using TimePoint = std::chrono::time_point<Clock>;
 
 #define DEVICETYPE_KEYBOARD (1 << 0)
 #define DEVICETYPE_MOUSE    (1 << 1)
+
+struct ActiveJob {
+    AtomSequenceJob job;
+    size_t atom_index;
+    int timerfd;
+
+    explicit ActiveJob(const AtomSequenceJob& job_, size_t atom_index_ = 0, int timerfd_ = -1)
+        : job{job_}, atom_index{atom_index_}, timerfd{timerfd_}
+    {}
+};
 
 struct DeviceConfig {
     uint16_t vid{0};
@@ -22,6 +37,9 @@ struct DeviceConfig {
     std::string name;
     EventJobMap mappings;
     VirtualDevice* vdev{nullptr};
+
+    std::vector<std::unique_ptr<ActiveJob>> active_jobs;
+    std::queue<AtomSequenceJob> pending_jobs;
 };
 
 struct DeviceRef {

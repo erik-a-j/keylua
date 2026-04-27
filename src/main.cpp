@@ -13,6 +13,7 @@
 #include "virtual_device.h"
 #include "event_pipeline.h"
 #include "lua_runtime.h"
+#include "monitor.h"
 
 #define INIT_LUA "init.lua"
 #define USER_CONFIG_REL_TO_HOME ".config/keylua/" INIT_LUA
@@ -23,97 +24,6 @@ static std::atomic<bool> g_stop{false};
 static void signal_handler(int)
 {
     g_stop.store(true);
-}
-
-struct usr_data_t {
-    const std::vector<DeviceConfig>& devices;
-    const std::vector<EventJob>& jobs;
-};
-
-void event_callback(uint32_t device_id, const input_event* ev, void* usr_data)
-{
-    if (ev->type != EV_KEY) return;
-
-    usr_data_t* x = reinterpret_cast<usr_data_t*>(usr_data);
-    const auto& d = x->devices[device_id];
-
-    auto value_to_action = [](int32_t v) -> const char*
-    {
-        switch (v)
-        {
-        case 0: return "RELEASE";
-        case 1: return "PRESS";
-        case 2: return "REPEAT";
-        default: return nullptr;
-        }
-    };
-
-    const char* action = value_to_action(ev->value);
-    const char* key = libevdev_event_code_get_name(ev->type, ev->code);
-
-    std::string map = "passthrough";
-    {
-        auto it = d.mappings.find(ev->code);
-        if (it != d.mappings.end())
-        {
-            const std::optional<uint32_t>& slot = it->second[static_cast<size_t>(ev->value)];
-            if (slot.has_value())
-            {
-                const EventJob& job = x->jobs[slot.value()];
-                std::visit([&](const auto& j)
-                {
-                    using T = std::decay_t<decltype(j)>;
-
-                    if constexpr (std::is_same_v<T, AtomSequenceJob>)
-                    {
-                        map = "AtomSequenceJob{";
-                        for (const auto& atom : j.atoms)
-                        {
-                            map += "\n  ";
-                            const char* seqaction = value_to_action(atom.value);
-                            const char* seqkey = libevdev_event_code_get_name(atom.type, atom.code);
-
-                            if (seqaction)
-                            {
-                                map += seqaction;
-                            }
-                            else
-                            {
-                                map += "value(";
-                                map += std::to_string(atom.value) + ")";
-                            }
-                            map += ": ";
-                            if (seqkey)
-                            {
-                                map += seqkey;
-                            }
-                            else
-                            {
-                                map += "value(";
-                                map += std::to_string(atom.code) + ")";
-                            }
-                            map += ",";
-                        }
-                        map += "\n}";
-                    }
-                    else if constexpr (std::is_same_v<T, LuaFunctionJob>)
-                    {
-                        map = "LuaFunctionJob";
-                    }
-                }, job);
-            }
-        }
-
-        std::cout << d.name << ": action=";
-        if (action) std::cout << action;
-        else std::cout << "value(" << ev->value << ")";
-
-        std::cout << ", key=";
-        if (key) std::cout << key;
-        else std::cout << "value(" << ev->code << ")";
-
-        std::cout << ", map=" << map << std::endl;
-    }
 }
 
 int main(int argc, char* argv[])
@@ -157,7 +67,7 @@ int main(int argc, char* argv[])
     std::cout << "devices count: " << usr_data.devices.size() << std::endl;
     std::cout << "jobs count: " << usr_data.jobs.size() << std::endl;
 
-    EventPipeline pipeline{lua, event_callback, &usr_data};
+    EventPipeline pipeline{lua, monitor_event_callback, &usr_data};
     if (!pipeline)
     {
         std::cerr << pipeline.errmsg() << std::endl;

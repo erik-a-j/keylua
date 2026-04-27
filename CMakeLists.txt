@@ -31,6 +31,7 @@ set(SRC_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/virtual_device.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/event_pipeline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/lua_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/monitor.cpp
 )
 
 add_custom_command(

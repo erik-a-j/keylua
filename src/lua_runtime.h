@@ -25,6 +25,7 @@ public:
 
     const std::vector<EventJob>& jobs() const { return m_jobs; }
     const std::vector<DeviceConfig>& devices() const { return m_devices; }
+    std::vector<DeviceConfig>& devices() { return m_devices; }
 
     explicit operator bool() const { return m_errbuf.empty() && m_lua_state != nullptr; }
     std::string_view errmsg() const { return m_errbuf; }
@@ -32,9 +33,11 @@ public:
 private:
     int l_device(::lua_State* L);
     int l_dev_map(lua_State* L);
+    int l_dev_emit(lua_State* L);
     int l_keydown(::lua_State* L);
     int l_keyup(::lua_State* L);
     int l_key(::lua_State* L);
+    int l_sleep(::lua_State* L);
     int l_job_concat(lua_State* L);
 
     int impl_key(::lua_State* L, const char* fname, int32_t key_action);

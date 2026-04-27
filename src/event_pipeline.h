@@ -8,13 +8,25 @@
 #include <string>
 #include <string_view>
 #include <atomic>
+#include <variant>
 
 typedef void (*event_callback_t)(uint32_t device_id, const input_event* ev, void* usr_data);
 
-struct Watch {
+struct DeviceWatch {
     DeviceGrabber* grabber;
     uint32_t device_id;
+    explicit DeviceWatch(DeviceGrabber* grabber_, uint32_t device_id_)
+        : grabber{grabber_}, device_id{device_id_}
+    {}
 };
+struct TimerWatch {
+    ActiveJob* job;
+    uint32_t device_id;
+    explicit TimerWatch(ActiveJob* job_, uint32_t device_id_)
+        : job{job_}, device_id{device_id_}
+    {}
+};
+using Watch = std::variant<DeviceWatch, TimerWatch>;
 
 class EventPipeline {
 public:
@@ -35,8 +47,12 @@ public:
     std::string errmsg() const { return m_errbuf + std::string{m_lua.errmsg()}; }
 
 private:
-
+    bool register_timer(uint32_t device_id, ActiveJob& aj);
+    bool start_job(uint32_t device_id, ActiveJob& aj);
+    bool finish_job(uint32_t device_id, ActiveJob& aj);
     bool drain(Watch& w);
+    bool step_active_job(uint32_t device_id, ActiveJob& aj);
+
 
     LuaRuntime& m_lua;
     event_callback_t m_evcb;

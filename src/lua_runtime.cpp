@@ -1,6 +1,7 @@
 
 #include "lua_runtime.h"
 #include "virtual_device.h"
+#include "utils.h"
 #include <lua.hpp>
 #include <unistd.h>
 #include <cstdlib>
@@ -25,9 +26,7 @@ void LuaRuntime::init_lua()
     m_lua_state = ::luaL_newstate();
     lua_State* L = m_lua_state;
     luaL_openlibs(L);
-
     *static_cast<LuaRuntime**>(lua_getextraspace(L)) = this;
-
 
     ::luaL_newmetatable(L, KEYLUA_DEVICE_MT);
 
@@ -35,6 +34,8 @@ void LuaRuntime::init_lua()
     lua_newtable(L);
     lua_pushcfunction(L, &dispatch<&LuaRuntime::l_dev_map>);
     ::lua_setfield(L, -2, "map");
+    lua_pushcfunction(L, &dispatch<&LuaRuntime::l_dev_emit>);
+    ::lua_setfield(L, -2, "emit");
     // Stack now: [metatable, methods_table]
     ::lua_setfield(L, -2, "__index");
     // Stack now: [metatable]  (with __index = methods_table set)
@@ -49,6 +50,7 @@ void LuaRuntime::init_lua()
     lua_register(L, "keydown", &dispatch<&LuaRuntime::l_keydown>);
     lua_register(L, "keyup", &dispatch<&LuaRuntime::l_keyup>);
     lua_register(L, "key", &dispatch<&LuaRuntime::l_key>);
+    lua_register(L, "sleep", &dispatch<&LuaRuntime::l_sleep>);
 }
 
 LuaRuntime::LuaRuntime(const char* config_path)
@@ -118,6 +120,10 @@ uint32_t LuaRuntime::noop_job()
 
 bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
 {
+    constexpr int kState_bad = -1;
+    constexpr int kState_good = 0;
+    constexpr int kState_sleeping = 1;
+
     DeviceConfig& dev_cfg = m_devices[device_id];
     if (dev_cfg.vdev == nullptr)
     {
@@ -134,19 +140,13 @@ bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
             if (slot.has_value())
             {
                 const EventJob& job = m_jobs[slot.value()];
-                return std::visit([&](const auto& j) -> bool
-                {
-                    using T = std::decay_t<decltype(j)>;
-
-                    if constexpr (std::is_same_v<T, AtomSequenceJob>)
+                bool ok = std::visit(overloaded{
+                    [&](const AtomSequenceJob& j) -> bool
                     {
-                        for (const InputAtom& atom : j.atoms)
-                        {
-                            if (!dev_cfg.vdev->emit(atom.type, atom.code, atom.value)) { return false; }
-                        }
-                        return dev_cfg.vdev->emit(EV_SYN, SYN_REPORT, 0);
-                    }
-                    else if constexpr (std::is_same_v<T, LuaFunctionJob>)
+                        dev_cfg.pending_jobs.push(j);
+                        return true;
+                    },
+                    [&](const LuaFunctionJob& j) -> bool
                     {
                         ::lua_rawgeti(m_lua_state, LUA_REGISTRYINDEX, j.lua_ref);
                         ::lua_pushinteger(m_lua_state, ev.value);
@@ -159,6 +159,8 @@ bool LuaRuntime::process_event(uint32_t device_id, const ::input_event& ev)
                         return true;
                     }
                 }, job);
+
+                return ok;
             }
         }
     }
@@ -247,13 +249,13 @@ int LuaRuntime::l_dev_map(lua_State* L)
             if (evcode == -1) { return ::luaL_error(L, "map: unknown key '%s'", name); }
 
             press_job_id = new_job(AtomSequenceJob{{
-                {EV_KEY, static_cast<uint16_t>(evcode), 1}
+                InputAtom{EV_KEY, static_cast<uint16_t>(evcode), 1}
             }});
             release_job_id = new_job(AtomSequenceJob{{
-                { EV_KEY, static_cast<uint16_t>(evcode), 0 }
+                InputAtom{EV_KEY, static_cast<uint16_t>(evcode), 0}
             }});
             repeat_job_id = new_job(AtomSequenceJob{{
-                { EV_KEY, static_cast<uint16_t>(evcode), 2 }
+                InputAtom{EV_KEY, static_cast<uint16_t>(evcode), 2}
             }});
         }
     }
@@ -294,14 +296,14 @@ int LuaRuntime::l_dev_map(lua_State* L)
                 if (value == 2)
                 {
                     result = new_job(AtomSequenceJob{{
-                        {EV_KEY, static_cast<uint16_t>(evcode), 1},
-                        {EV_KEY, static_cast<uint16_t>(evcode), 0}
+                        InputAtom{EV_KEY, static_cast<uint16_t>(evcode), 1},
+                        InputAtom{EV_KEY, static_cast<uint16_t>(evcode), 0}
                     }});
                 }
                 else
                 {
                     result = new_job(AtomSequenceJob{{
-                        {EV_KEY, static_cast<uint16_t>(evcode), value}
+                        InputAtom{EV_KEY, static_cast<uint16_t>(evcode), value}
                     }});
                 }
             }
@@ -354,12 +356,36 @@ int LuaRuntime::l_dev_map(lua_State* L)
     return 0;
 }
 
+int LuaRuntime::l_dev_emit(lua_State* L)
+{
+    auto* ref = static_cast<DeviceRef*>(luaL_checkudata(L, 1, KEYLUA_DEVICE_MT));
+    auto* jref = static_cast<EventJobRef*>(luaL_checkudata(L, 2, KEYLUA_EVENTJOB_MT));
+
+    const EventJob& job = m_jobs[jref->id];
+    if (!std::holds_alternative<AtomSequenceJob>(job))
+    {
+        return luaL_error(L, "emit: only AtomSequenceJobs can be emitted");
+    }
+
+    m_devices[ref->id].pending_jobs.push(std::get<AtomSequenceJob>(job));
+    return 0;
+}
+
 #define KEYACTION_PRESS (1 << 0)
 #define KEYACTION_RELEASE (1 << 1)
 
 int LuaRuntime::l_keydown(::lua_State* L) { return this->impl_key(L, "keydown", KEYACTION_PRESS); }
 int LuaRuntime::l_keyup(::lua_State* L) { return this->impl_key(L, "keyup", KEYACTION_RELEASE); }
 int LuaRuntime::l_key(::lua_State* L) { return this->impl_key(L, "key", KEYACTION_PRESS | KEYACTION_RELEASE); }
+int LuaRuntime::l_sleep(::lua_State* L)
+{
+    lua_Integer ms = luaL_checkinteger(L, 1);
+    if (ms < 0) { return luaL_error(L, "sleep: duration must be non-negative"); }
+
+    uint32_t id = new_job(AtomSequenceJob{{SleepAtom{static_cast<uint32_t>(ms)}}});
+    push_job_ref(L, id);
+    return 1;
+}
 int LuaRuntime::impl_key(::lua_State* L, const char* fname, int32_t key_action)
 {
     const char* name = luaL_checkstring(L, 1);
@@ -367,9 +393,9 @@ int LuaRuntime::impl_key(::lua_State* L, const char* fname, int32_t key_action)
     int evcode = libevdev_event_code_from_name(EV_KEY, name);
     if (evcode == -1) { return luaL_error(L, "%s: unknown key '%s'", fname, name); }
 
-    std::vector<InputAtom> atoms;
-    if (key_action & KEYACTION_PRESS) { atoms.push_back({EV_KEY, static_cast<uint16_t>(evcode), 1}); }
-    if (key_action & KEYACTION_RELEASE) { atoms.push_back({EV_KEY, static_cast<uint16_t>(evcode), 0}); }
+    std::vector<Atom> atoms;
+    if (key_action & KEYACTION_PRESS) { atoms.push_back(InputAtom{EV_KEY, static_cast<uint16_t>(evcode), 1}); }
+    if (key_action & KEYACTION_RELEASE) { atoms.push_back(InputAtom{EV_KEY, static_cast<uint16_t>(evcode), 0}); }
 
     uint32_t id = new_job(AtomSequenceJob{std::move(atoms)});
     push_job_ref(L, id);
